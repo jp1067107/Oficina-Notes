@@ -28,7 +28,10 @@ import {
   AudioLines,
   History,
   DollarSign,
-  PlusCircle
+  PlusCircle,
+  Cloud,
+  CloudOff,
+  RefreshCw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
@@ -146,6 +149,7 @@ export default function App() {
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isIframe, setIsIframe] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<'synced' | 'saving' | 'error'>('synced');
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
@@ -183,6 +187,7 @@ export default function App() {
 
   const saveDraft = useCallback(async (note: NoteData) => {
     if (!user) return;
+    setSyncStatus('saving');
     const now = new Date().toISOString();
     let total = 0;
     if (note.includePartsValue) total += Number(note.partsValue);
@@ -199,8 +204,10 @@ export default function App() {
     
     try {
       await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
+      setSyncStatus('synced');
     } catch (error) {
       console.error('Draft save failed', error);
+      setSyncStatus('error');
     }
   }, [user]);
 
@@ -230,6 +237,16 @@ export default function App() {
   // Environment Check
   useEffect(() => {
     setIsIframe(window.self !== window.top);
+    
+    // Force unregister any old service workers from previous PWA attempts to fix stale code
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister();
+          console.log('Old Service Worker unregistered to force update');
+        }
+      });
+    }
   }, []);
 
   // Test Connection
@@ -354,6 +371,7 @@ export default function App() {
 
   const saveCurrentNote = async () => {
     if (!user) return;
+    setSyncStatus('saving');
     const now = new Date().toISOString();
     
     // Calculate total
@@ -373,6 +391,7 @@ export default function App() {
     const path = `notes/${noteToSave.id}`;
     try {
       await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
+      setSyncStatus('synced');
       setView('list');
       confetti({
         particleCount: 100,
@@ -831,6 +850,18 @@ export default function App() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-full border border-zinc-800">
+                {syncStatus === 'saving' ? (
+                  <RefreshCw size={12} className="text-zinc-500 animate-spin" />
+                ) : syncStatus === 'error' ? (
+                  <CloudOff size={12} className="text-red-500" />
+                ) : (
+                  <Cloud size={12} className="text-brand" />
+                )}
+                <span className="text-[8px] font-black uppercase tracking-tighter text-zinc-500">
+                  {syncStatus === 'saving' ? 'Sincronizando' : syncStatus === 'error' ? 'Erro' : 'Salvo na Nuvem'}
+                </span>
+              </div>
               <button 
                 onClick={handleCreateNote}
                 className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
@@ -1105,12 +1136,26 @@ export default function App() {
             }} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400">
               <ArrowLeft size={24} />
             </button>
-            <h2 className="text-2xl font-bold">
-              {step === 1 ? 'Dados Básicos' : 
-               step === 2 ? 'Peças' : 
-               step === 3 ? 'Detalhes' : 
-               step === 4 ? 'Financeiro' : 'Resumo'}
-            </h2>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold">
+                {step === 1 ? 'Dados Básicos' : 
+                 step === 2 ? 'Peças' : 
+                 step === 3 ? 'Detalhes' : 
+                 step === 4 ? 'Financeiro' : 'Resumo'}
+              </h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                {syncStatus === 'saving' ? (
+                  <RefreshCw size={10} className="text-zinc-500 animate-spin" />
+                ) : syncStatus === 'error' ? (
+                  <CloudOff size={10} className="text-red-500" />
+                ) : (
+                  <Cloud size={10} className="text-brand" />
+                )}
+                <span className="text-[8px] font-bold uppercase tracking-widest text-zinc-600">
+                  {syncStatus === 'saving' ? 'Salvando alterações...' : syncStatus === 'error' ? 'Falha na conexão' : 'Sincronizado'}
+                </span>
+              </div>
+            </div>
           </header>
 
           <div className="flex gap-1 mb-8">
