@@ -1,5 +1,16 @@
 {
   "entities": {
+    "MaterialItem": {
+      "title": "Material or Piece Item",
+      "description": "Specific piece or material used in the service",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" }
+      },
+      "required": ["id", "name", "price"]
+    },
     "ServicePiece": {
       "title": "Service Piece",
       "description": "Details of a specific car piece being serviced",
@@ -25,6 +36,8 @@
         "plate": { "type": "string" },
         "cpfCnpj": { "type": "string" },
         "whatsapp": { "type": "string" },
+        "status": { "type": "string", "enum": ["em_espera", "na_oficina", "finalizado"] },
+        "deliveryDate": { "type": "string", "format": "date" },
         "pieces": {
           "type": "array",
           "items": { "$ref": "#/entities/ServicePiece" }
@@ -35,13 +48,18 @@
         "laborValue": { "type": "number" },
         "includeMaterialsValue": { "type": "boolean" },
         "materialsValue": { "type": "number" },
+        "onlyTotalValue": { "type": "boolean" },
         "totalValue": { "type": "number" },
+        "materialItems": {
+          "type": "array",
+          "items": { "$ref": "#/entities/MaterialItem" }
+        },
         "observations": { "type": "string" },
         "isDraft": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "userId", "customerName", "createdAt", "updatedAt"]
+      "required": ["id", "userId", "customerName", "status", "createdAt", "updatedAt"]
     },
     "Assinatura": {
       "title": "Subscription",

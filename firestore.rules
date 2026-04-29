@@ -36,9 +36,17 @@ service cloud.firestore {
              (piece.get('audioBlob', '') is string && piece.get('audioBlob', '').size() <= 2000000);
     }
 
+    function isValidMaterialItem(item) {
+      return item is map &&
+             item.id is string && item.id.size() <= 128 &&
+             item.name is string && item.name.size() <= 200 &&
+             item.price is number;
+    }
+
     function isValidNote(data) {
-      return data.keys().hasAll(['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'isDraft', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 19 &&
+      return data.keys().hasAll(['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'createdAt', 'updatedAt']) &&
+             data.keys().hasAny(['deliveryDate']) &&
+             data.keys().size() == 23 &&
              data.id is string && data.id.size() <= 128 &&
              data.userId == request.auth.uid &&
              data.customerName is string && data.customerName.size() <= 200 &&
@@ -46,6 +54,8 @@ service cloud.firestore {
              data.plate is string && data.plate.size() <= 20 &&
              data.cpfCnpj is string && data.cpfCnpj.size() <= 30 &&
              data.whatsapp is string && data.whatsapp.size() <= 30 &&
+             data.status in ['em_espera', 'na_oficina', 'finalizado'] &&
+             (data.deliveryDate is string && data.deliveryDate.size() <= 20) &&
              data.pieces is list && data.pieces.size() <= 50 &&
              (data.pieces.size() == 0 || isValidServicePiece(data.pieces[0])) &&
              data.includePartsValue is bool &&
@@ -54,7 +64,10 @@ service cloud.firestore {
              data.laborValue is number &&
              data.includeMaterialsValue is bool &&
              data.materialsValue is number &&
+             data.onlyTotalValue is bool &&
              data.totalValue is number &&
+             data.materialItems is list && data.materialItems.size() <= 100 &&
+             (data.materialItems.size() == 0 || isValidMaterialItem(data.materialItems[0])) &&
              data.observations is string && data.observations.size() <= 5000 &&
              data.isDraft is bool &&
              data.createdAt is string && 
@@ -75,7 +88,7 @@ service cloud.firestore {
                       incoming().userId == existing().userId &&
                       incoming().id == existing().id &&
                       incoming().createdAt == existing().createdAt &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'isDraft', 'updatedAt']);
+                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'deliveryDate', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'updatedAt']);
                       
       allow delete: if isOwner(existing().userId);
     }
