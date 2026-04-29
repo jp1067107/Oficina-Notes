@@ -37,16 +37,30 @@
         "materialsValue": { "type": "number" },
         "totalValue": { "type": "number" },
         "observations": { "type": "string" },
+        "isDraft": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "userId", "customerName", "createdAt", "updatedAt"]
+    },
+    "Assinatura": {
+      "title": "Subscription",
+      "description": "User subscription status",
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["ativo", "inativo"] }
+      },
+      "required": ["status"]
     }
   },
   "firestore": {
     "notes": {
       "schema": "Note",
       "description": "Collection of all service orders"
+    },
+    "assinaturas": {
+      "schema": "Assinatura",
+      "description": "Collection of user subscriptions"
     }
   }
 }

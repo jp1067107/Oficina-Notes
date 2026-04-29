@@ -39,6 +39,7 @@ import {
   setDoc, 
   deleteDoc, 
   doc, 
+  getDoc,
   orderBy,
   getDocFromServer
 } from 'firebase/firestore';
@@ -108,6 +109,7 @@ const initialNote = (userId: string = ''): NoteData => ({
   materialsValue: 0,
   totalValue: 0,
   observations: '',
+  isDraft: true,
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -115,6 +117,8 @@ const initialNote = (userId: string = ''): NoteData => ({
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isVerifyingSubscription, setIsVerifyingSubscription] = useState(false);
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
   const [view, setView] = useState<'list' | 'editor' | 'details'>('list');
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [currentNote, setCurrentNote] = useState<NoteData>(initialNote());
@@ -127,6 +131,52 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIframe, setIsIframe] = useState(false);
+
+  const saveDraft = useCallback(async (note: NoteData) => {
+    if (!user) return;
+    const now = new Date().toISOString();
+    let total = 0;
+    if (note.includePartsValue) total += Number(note.partsValue);
+    if (note.includeLaborValue) total += Number(note.laborValue);
+    if (note.includeMaterialsValue) total += Number(note.materialsValue);
+
+    const noteToSave: NoteData = { 
+      ...note, 
+      totalValue: total,
+      updatedAt: now,
+      userId: user.uid,
+      isDraft: true 
+    };
+    
+    try {
+      await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
+    } catch (error) {
+      console.error('Draft save failed', error);
+    }
+  }, [user]);
+
+  // Auto-save draft
+  useEffect(() => {
+    if (view !== 'editor' || !user) return;
+
+    const timer = setTimeout(() => {
+      saveDraft(currentNote);
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [currentNote, user, view, saveDraft]);
+
+  // Auto-save draft on visibility change (close/leave)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && view === 'editor' && user) {
+        saveDraft(currentNote);
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentNote, user, view, saveDraft]);
 
   // PWA Install Logic
   useEffect(() => {
@@ -208,12 +258,37 @@ export default function App() {
 
   // Auth state
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       if (u) {
-        setCurrentNote(initialNote(u.uid));
+        setIsVerifyingSubscription(true);
+        try {
+          const emailBusca = (u.email || '').toLowerCase().trim();
+          const subDoc = await getDoc(doc(db, 'assinaturas', emailBusca));
+          const subData = subDoc.data();
+          
+          if (!subDoc.exists() || subData?.status !== 'ativo') {
+            const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? 'Sim' : 'Não'}\nStatus da Assinatura: ${subData?.status || 'N/A'}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
+            alert(errorDetails);
+            await signOut(auth);
+            setSubscriptionError('Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.');
+            setUser(null);
+          } else {
+            setUser(u);
+            setSubscriptionError(null);
+            setCurrentNote(initialNote(u.uid));
+          }
+        } catch (error) {
+          console.error('Error verifying subscription:', error);
+          await signOut(auth);
+          setSubscriptionError('Erro ao verificar assinatura. Tente novamente.');
+          setUser(null);
+        } finally {
+          setIsVerifyingSubscription(false);
+        }
+      } else {
+        setUser(null);
       }
+      setLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -250,7 +325,12 @@ export default function App() {
 
   const handleEditNote = (note: NoteData) => {
     setCurrentNote({ ...note });
-    setView('details');
+    if (note.isDraft) {
+      setStep(1);
+      setView('editor');
+    } else {
+      setView('details');
+    }
   };
 
   const handleDeleteNote = async (id: string, e: React.MouseEvent) => {
@@ -279,7 +359,8 @@ export default function App() {
       ...currentNote, 
       totalValue: total,
       updatedAt: now,
-      userId: user.uid 
+      userId: user.uid,
+      isDraft: false
     };
     
     const path = `notes/${noteToSave.id}`;
@@ -337,10 +418,16 @@ export default function App() {
 
   const [searchTerm, setSearchTerm] = useState('');
 
-  const filteredNotes = notes.filter(n => 
-    n.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    n.plate.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredNotes = notes
+    .filter(n => 
+      n.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      n.plate.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (a.isDraft && !b.isDraft) return -1;
+      if (!a.isDraft && b.isDraft) return 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
   const exportJSON = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(currentNote));
@@ -486,13 +573,33 @@ export default function App() {
   );
 
   const handleLogin = async () => {
+    setSubscriptionError(null);
     try {
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      const u = result.user;
+      
+      setIsVerifyingSubscription(true);
+      const emailBusca = (u.email || '').toLowerCase().trim();
+      const subDoc = await getDoc(doc(db, 'assinaturas', emailBusca));
+      const subData = subDoc.data();
+      
+      if (!subDoc.exists() || subData?.status !== 'ativo') {
+        const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? 'Sim' : 'Não'}\nStatus da Assinatura: ${subData?.status || 'N/A'}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
+        alert(errorDetails);
+        await signOut(auth);
+        setSubscriptionError('Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.');
+      } else {
+        setUser(u);
+        setCurrentNote(initialNote(u.uid));
+      }
     } catch (error: any) {
       if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
         return;
       }
       console.error('Erro ao fazer login:', error);
+      setSubscriptionError('Erro ao realizar login. Tente novamente.');
+    } finally {
+      setIsVerifyingSubscription(false);
     }
   };
 
@@ -516,13 +623,38 @@ export default function App() {
         <p className="text-zinc-500 text-center mb-12 uppercase tracking-widest text-[10px] font-bold">
           Gestão Profissional para sua Oficina
         </p>
+
+        <AnimatePresence>
+          {subscriptionError && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="w-full max-w-sm mb-6 p-4 bg-red-500/10 border border-red-500/50 rounded-xl"
+            >
+              <p className="text-red-500 text-xs font-bold text-center uppercase tracking-tight">
+                {subscriptionError}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         <button 
           onClick={handleLogin}
-          className="w-full max-w-sm flex items-center justify-center gap-4 bg-white text-black font-black uppercase tracking-widest text-xs py-4 rounded-xl hover:bg-zinc-200 transition-all active:scale-95"
+          disabled={isVerifyingSubscription}
+          className="w-full max-w-sm flex items-center justify-center gap-4 bg-white text-black font-black uppercase tracking-widest text-xs py-4 rounded-xl hover:bg-zinc-200 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <LogIn size={20} />
-          Entrar com Google
+          {isVerifyingSubscription ? (
+            <>
+              <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+              <span>Verificando assinatura...</span>
+            </>
+          ) : (
+            <>
+              <LogIn size={20} />
+              <span>Entrar com Google</span>
+            </>
+          )}
         </button>
         
         <p className="mt-8 text-zinc-700 text-[9px] uppercase tracking-[0.2em]">
@@ -608,15 +740,28 @@ export default function App() {
                 <div 
                   key={note.id}
                   onClick={() => handleEditNote(note)}
-                  className="card group cursor-pointer hover:border-brand border-zinc-800 active:scale-[0.98] transition-all"
+                  className={`card group cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden
+                    ${note.isDraft ? 'border-amber-500/50 bg-amber-500/5 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'border-zinc-800 hover:border-brand'}`}
                 >
-                  <div className="flex justify-between items-start">
+                  {note.isDraft && (
+                    <motion.div 
+                      className="absolute inset-0 border-2 border-amber-500/20 rounded-xl"
+                      animate={{ opacity: [0.2, 0.5, 0.2] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                    />
+                  )}
+                  <div className="flex justify-between items-start relative z-10">
                     <div className="flex items-center gap-3">
-                      <div className="w-1.5 h-8 bg-brand rounded-full"></div>
+                      <div className={`w-1.5 h-8 rounded-full ${note.isDraft ? 'bg-amber-500 animate-pulse' : 'bg-brand'}`}></div>
                       <div>
-                        <h3 className="font-black text-xl italic tracking-tighter uppercase">{note.plate || 'SEM PLACA'}</h3>
-                        <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">{note.customerName}</p>
-                        <p className="text-brand text-xs font-mono font-bold mt-1">R$ {note.totalValue?.toFixed(2)}</p>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-xl italic tracking-tighter uppercase">{note.plate || 'SEM PLACA'}</h3>
+                          {note.isDraft && (
+                            <span className="text-[8px] bg-amber-500 text-black px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">RASCUNHO</span>
+                          )}
+                        </div>
+                        <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">{note.customerName || 'Cliente não identificado'}</p>
+                        <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold mt-1`}>R$ {note.totalValue?.toFixed(2)}</p>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
@@ -765,7 +910,10 @@ export default function App() {
       ) : (
         <div className="p-4 space-y-6">
           <header className="flex items-center gap-4 py-2">
-            <button onClick={() => setView('list')} className="p-2 hover:bg-zinc-800 rounded-full">
+            <button onClick={() => {
+              saveDraft(currentNote);
+              setView('list');
+            }} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400">
               <ArrowLeft size={24} />
             </button>
             <h2 className="text-2xl font-bold">

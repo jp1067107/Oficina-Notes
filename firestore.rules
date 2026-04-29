@@ -37,8 +37,8 @@ service cloud.firestore {
     }
 
     function isValidNote(data) {
-      return data.keys().hasAll(['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'createdAt', 'updatedAt']) &&
-             data.keys().size() == 18 &&
+      return data.keys().hasAll(['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'isDraft', 'createdAt', 'updatedAt']) &&
+             data.keys().size() == 19 &&
              data.id is string && data.id.size() <= 128 &&
              data.userId == request.auth.uid &&
              data.customerName is string && data.customerName.size() <= 200 &&
@@ -56,6 +56,7 @@ service cloud.firestore {
              data.materialsValue is number &&
              data.totalValue is number &&
              data.observations is string && data.observations.size() <= 5000 &&
+             data.isDraft is bool &&
              data.createdAt is string && 
              data.updatedAt is string;
     }
@@ -74,9 +75,13 @@ service cloud.firestore {
                       incoming().userId == existing().userId &&
                       incoming().id == existing().id &&
                       incoming().createdAt == existing().createdAt &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'updatedAt']);
+                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'totalValue', 'observations', 'isDraft', 'updatedAt']);
                       
       allow delete: if isOwner(existing().userId);
+    }
+    
+    match /assinaturas/{email} {
+      allow get: if isSignedIn() && request.auth.token.email.lower() == email;
     }
   }
 }

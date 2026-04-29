@@ -24,6 +24,7 @@ export interface NoteData {
   materialsValue: number;
   totalValue: number;
   observations: string;
+  isDraft: boolean;
   createdAt: string;
   updatedAt: string;
 }
