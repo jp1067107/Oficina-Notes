@@ -116,6 +116,9 @@ const initialNote = (userId: string = ''): NoteData => ({
   updatedAt: new Date().toISOString(),
 });
 
+// Main Application Component
+// Note: Transcription via AI requires a valid GEMINI_API_KEY set in the environment.
+// Deployment Note: If deployment fails with CustomOrgPolicyException, please check Org Policies for run.managed.requireInvokerIam.
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,20 +152,25 @@ export default function App() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [
-          {
-            text: "Transcreva este áudio de oficina mecânica. Retorne apenas o texto transcrito, de forma clara e profissional em português. Se não houver fala clara, retorne apenas o que puder entender ou nada se for apenas ruído."
-          },
-          {
-            inlineData: {
-              mimeType: "audio/webm",
-              data: base64Data
+        contents: [{
+          role: "user",
+          parts: [
+            {
+              text: "Transcreva este áudio de oficina mecânica. Retorne apenas o texto transcrito, de forma clara e profissional em português. Se não houver fala clara, retorne apenas o que puder entender ou nada se for apenas ruído."
+            },
+            {
+              inlineData: {
+                mimeType: "audio/webm",
+                data: base64Data
+              }
             }
-          }
-        ]
+          ]
+        }]
       });
       
-      return response.text || '';
+      const text = response.text || '';
+      console.log('Transcrição concluída:', text);
+      return text;
     } catch (error) {
       console.error('Error transcribing audio:', error);
       return '';
@@ -384,7 +392,6 @@ export default function App() {
         await deleteDoc(doc(db, 'notes', id));
         if (view === 'details') setView('list');
       } catch (error) {
-        console.error('Erro ao excluir nota:', error);
         handleFirestoreError(error, OperationType.DELETE, path);
       }
     }
@@ -458,11 +465,19 @@ export default function App() {
             setIsTranscribing(pieceId);
             const transcription = await transcribeAudio(base64Audio);
             if (transcription) {
-              updatePiece(pieceId, { 
-                description: (currentNote.pieces.find(p => p.id === pieceId)?.description || '') + 
-                           (currentNote.pieces.find(p => p.id === pieceId)?.description ? ' ' : '') + 
-                           transcription 
-              });
+              setCurrentNote(prev => ({
+                ...prev,
+                pieces: prev.pieces.map(p => {
+                  if (p.id === pieceId) {
+                    const currentDesc = p.description || '';
+                    return {
+                      ...p,
+                      description: currentDesc + (currentDesc ? ' ' : '') + transcription
+                    };
+                  }
+                  return p;
+                })
+              }));
             }
             setIsTranscribing(null);
           }
