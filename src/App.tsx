@@ -45,6 +45,7 @@ const initialNote = (): NoteData => ({
   includeMaterialsValue: false,
   materialsValue: 0,
   totalValue: 0,
+  observations: '',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 });
@@ -55,8 +56,10 @@ export default function App() {
   const [currentNote, setCurrentNote] = useState<NoteData>(initialNote());
   const [step, setStep] = useState(1);
   const [isRecording, setIsRecording] = useState<string | null>(null);
+  const [isListening, setIsListening] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load notes
   useEffect(() => {
@@ -195,6 +198,42 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const playAudio = (blob: string) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+    }
+    const audio = new Audio(blob);
+    currentAudioRef.current = audio;
+    audio.play();
+  };
+
+  const startDictation = (pieceId: string) => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Seu navegador não suporta reconhecimento de voz.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => setIsListening(pieceId);
+    recognition.onend = () => setIsListening(null);
+    recognition.onerror = () => setIsListening(null);
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      const piece = currentNote.pieces.find(p => p.id === pieceId);
+      const currentDesc = piece?.description || '';
+      updatePiece(pieceId, { description: currentDesc + (currentDesc ? ' ' : '') + transcript });
+    };
+
+    recognition.start();
+  };
+
   const updatePiece = (id: string, updates: Partial<ServicePiece>) => {
     setCurrentNote(prev => ({
       ...prev,
@@ -253,7 +292,18 @@ export default function App() {
     
     y += 5;
     doc.setFontSize(16);
-    doc.text(`VALOR TOTAL: R$ ${currentNote.totalValue}`, margin, y);
+    doc.text(`VALOR TOTAL: R$ ${currentNote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y);
+
+    if (currentNote.observations) {
+      y += 15;
+      if (y > 270) { doc.addPage(); y = 20; }
+      doc.setFontSize(14);
+      doc.text('Observações Gerais', margin, y);
+      y += 8;
+      doc.setFontSize(10);
+      const obs = doc.splitTextToSize(currentNote.observations, 170);
+      doc.text(obs, margin, y);
+    }
 
     doc.save(`os_${currentNote.plate || 'nota'}_${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
@@ -444,6 +494,13 @@ export default function App() {
               </div>
             </div>
 
+            {currentNote.observations && (
+              <div className="card">
+                <h3 className="label-tech text-brand mb-2">Observações Gerais</h3>
+                <p className="text-xs text-zinc-400 whitespace-pre-wrap">{currentNote.observations}</p>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 gap-2 pt-4">
               <button onClick={generatePDF} className="btn-primary flex items-center justify-center gap-2">
                 <FileText size={18} strokeWidth={3} /> GERAR PDF
@@ -621,23 +678,38 @@ export default function App() {
                               <StopCircle size={16} strokeWidth={3} />
                             </button>
                            ) : (
-                            <button 
-                              onClick={() => startRecording(piece.id)}
-                              className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
-                            >
-                              <Mic size={16} strokeWidth={3} />
-                            </button>
+                            <div className="flex gap-1">
+                              <button 
+                                onClick={() => startRecording(piece.id)}
+                                className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
+                                title="Gravar Áudio"
+                              >
+                                <Mic size={16} strokeWidth={3} />
+                              </button>
+                              <button 
+                                onClick={() => startDictation(piece.id)}
+                                className={`p-1.5 rounded transition-colors ${isListening === piece.id ? 'bg-brand text-black' : 'bg-zinc-800 text-brand hover:bg-zinc-700'}`}
+                                title="Falar para escrever"
+                              >
+                                <FileText size={16} strokeWidth={3} />
+                              </button>
+                            </div>
                            )}
                            {piece.audioBlob && (
-                             <button 
-                              onClick={() => {
-                                const audio = new Audio(piece.audioBlob);
-                                audio.play();
-                              }}
-                              className="bg-brand/20 text-brand p-1.5 rounded"
-                             >
-                               <Play size={16} className="fill-current" />
-                             </button>
+                             <div className="flex gap-1">
+                               <button 
+                                onClick={() => playAudio(piece.audioBlob!)}
+                                className="bg-brand/20 text-brand p-1.5 rounded"
+                               >
+                                 <Play size={16} className="fill-current" />
+                               </button>
+                               <button 
+                                onClick={() => updatePiece(piece.id, { audioBlob: undefined })}
+                                className="bg-red-500/10 text-red-500 p-1.5 rounded"
+                               >
+                                 <Trash2 size={16} />
+                               </button>
+                             </div>
                            )}
                         </div>
                       </div>
@@ -681,8 +753,9 @@ export default function App() {
                           <div className="w-24">
                             <input 
                               type="number" 
-                              value={currentNote.partsValue}
-                              onChange={e => setCurrentNote({ ...currentNote, partsValue: Number(e.target.value) })}
+                              step="0.01"
+                              value={currentNote.partsValue || ''}
+                              onChange={e => setCurrentNote({ ...currentNote, partsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
                               className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
                             />
                           </div>
@@ -705,8 +778,9 @@ export default function App() {
                         <div className="w-24">
                           <input 
                             type="number" 
-                            value={currentNote.laborValue}
-                            onChange={e => setCurrentNote({ ...currentNote, laborValue: Number(e.target.value) })}
+                            step="0.01"
+                            value={currentNote.laborValue || ''}
+                            onChange={e => setCurrentNote({ ...currentNote, laborValue: e.target.value === '' ? 0 : Number(e.target.value) })}
                             className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
                           />
                         </div>
@@ -728,8 +802,9 @@ export default function App() {
                         <div className="w-24">
                           <input 
                             type="number" 
-                            value={currentNote.materialsValue}
-                            onChange={e => setCurrentNote({ ...currentNote, materialsValue: Number(e.target.value) })}
+                            step="0.01"
+                            value={currentNote.materialsValue || ''}
+                            onChange={e => setCurrentNote({ ...currentNote, materialsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
                             className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
                           />
                         </div>
@@ -745,6 +820,18 @@ export default function App() {
                       </span>
                     </div>
                   </div>
+                </div>
+
+                <div className="card">
+                  <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center gap-2">
+                    <span className="w-1 h-3 bg-brand rounded-full"></span>OBSERVAÇÕES GERAIS
+                  </h2>
+                  <textarea 
+                    className="bg-black border border-zinc-800 p-3 text-xs text-zinc-300 rounded focus:border-brand outline-none resize-none w-full min-h-[100px] mt-2"
+                    placeholder="OUTROS ITENS OU OBSERVAÇÕES..."
+                    value={currentNote.observations}
+                    onChange={e => setCurrentNote({ ...currentNote, observations: e.target.value })}
+                  />
                 </div>
               </motion.div>
             )}
@@ -775,12 +862,26 @@ export default function App() {
                     <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
                        <span className="w-1 h-3 bg-brand rounded-full"></span>VALOR FINAL
                     </h2>
-                    <div className="flex justify-between items-end">
-                      <span className="text-3xl font-black italic tracking-tighter text-brand">
-                        R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </span>
+                    <div className="flex flex-col gap-1">
+                      <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase">
+                        <span>Serviços & Peças:</span>
+                        <span>R$ {totalValue.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between items-end">
+                        <span className="text-3xl font-black italic tracking-tighter text-brand">
+                          R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                  {currentNote.observations && (
+                    <div className="pt-4 border-t border-zinc-800">
+                      <h2 className="text-[10px] font-black text-brand uppercase mb-2 flex items-center gap-2">
+                         <span className="w-1 h-3 bg-brand rounded-full"></span>OBSERVAÇÕES
+                      </h2>
+                      <p className="text-[11px] text-zinc-400 whitespace-pre-wrap">{currentNote.observations}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">

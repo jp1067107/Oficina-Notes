@@ -31,4 +31,12 @@ export const CAR_PIECES = [
   { id: 'retd', label: 'Retrovisor Direito' },
   { id: 'grade', label: 'Grade Dianteira' },
   { id: 'spoiler', label: 'Spoiler / Saia Lateral' },
+  { id: 'capa_mot', label: 'Capa do Motor (Plástico)' },
+  { id: 'prot_carter', label: 'Protetor de Cárter' },
+  { id: 'vidro_dianteiro', label: 'Vidro Para-brisa' },
+  { id: 'vidro_traseiro', label: 'Vidro Traseiro' },
+  { id: 'caixa_roda_e', label: 'Caixa de Roda Esquerda' },
+  { id: 'caixa_roda_d', label: 'Caixa de Roda Direita' },
+  { id: 'painel_front', label: 'Painel Frontal' },
+  { id: 'painel_tras', label: 'Painel Traseiro' },
 ];
