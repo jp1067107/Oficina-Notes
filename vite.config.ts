@@ -11,8 +11,13 @@ export default defineConfig(({mode}) => {
       react(), 
       tailwindcss(),
       VitePWA({
+        devOptions: {
+          enabled: true,
+          type: 'module',
+          navigateFallback: 'index.html',
+        },
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg', 'icon.svg'],
         manifest: {
           name: 'OficinaNotes',
           short_name: 'Oficina',
@@ -20,17 +25,24 @@ export default defineConfig(({mode}) => {
           theme_color: '#22c55e',
           background_color: '#F8FAFC',
           display: 'standalone',
+          orientation: 'portrait',
           icons: [
             {
-              src: 'pwa-192x192.png',
+              src: 'icon.svg',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any'
             },
             {
-              src: 'pwa-512x512.png',
+              src: 'icon.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
+              purpose: 'any'
+            },
+            {
+              src: 'icon.svg',
+              sizes: '512x512',
+              type: 'image/svg+xml',
               purpose: 'maskable'
             }
           ]

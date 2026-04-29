@@ -126,25 +126,64 @@ export default function App() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
+  const [isIframe, setIsIframe] = useState(false);
 
   // PWA Install Logic
   useEffect(() => {
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-    if (isStandalone) return;
+    setIsIframe(window.self !== window.top);
+    
+    // Check if app is already installed
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 
-    const handler = (e: any) => {
+    if (isStandalone) {
+      setShowInstallBtn(false);
+      return;
+    }
+
+    // On iOS, we show the button but with instructions because beforeinstallprompt doesn't fire
+    if (isIOS) {
+      setShowInstallBtn(true);
+    }
+
+    const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setShowInstallBtn(true);
     };
 
-    window.addEventListener('beforeinstallprompt', handler);
+    const handleAppInstalled = () => {
+      setDeferredPrompt(null);
+      setShowInstallBtn(false);
+    };
 
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+    if (isIframe) {
+      window.open(window.location.href, '_blank');
+      return;
+    }
+
+    if (!deferredPrompt) {
+      // iOS or browser that doesn't support beforeinstallprompt yet
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      if (isIOS) {
+        alert('Para instalar no seu iPhone/iPad:\n1. Toque no botão de Compartilhar (aquele quadrado com uma seta para cima).\n2. Role para baixo e selecione "Adicionar à Tela de Início".');
+      } else {
+        alert('Para instalar:\nAbra o menu do seu navegador (três pontinhos no Chrome) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".');
+      }
+      return;
+    }
+    
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
@@ -534,9 +573,9 @@ export default function App() {
                 className="w-full bg-brand text-black font-black uppercase tracking-widest text-[10px] py-4 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse"
               >
                 <div className="bg-black text-brand p-1 rounded-md">
-                  <Download size={14} strokeWidth={3} />
+                  {isIframe ? <Download size={14} strokeWidth={3} /> : <Plus size={14} strokeWidth={3} />}
                 </div>
-                📲 Instalar Aplicativo no Celular
+                {isIframe ? '🌐 Abrir em nova aba para instalar' : '📲 Instalar Aplicativo no Celular'}
               </button>
             </motion.div>
           )}
