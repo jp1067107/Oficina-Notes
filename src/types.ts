@@ -24,6 +24,7 @@ export interface NoteData {
   cpfCnpj: string;
   whatsapp: string;
   status: ServiceStatus;
+  arrivalDate?: string;
   deliveryDate?: string;
   pieces: ServicePiece[];
   includePartsValue: boolean;
