@@ -108,8 +108,7 @@ const initialNote = (userId: string = ''): NoteData => ({
   cpfCnpj: '',
   whatsapp: '',
   status: 'em_espera',
-  arrivalDate: new Date().toISOString().split('T')[0],
-  deliveryDate: '',
+  deliveryDate: new Date().toISOString().split('T')[0],
   pieces: CAR_PIECES.map(p => ({ ...p, selected: false, description: '' })),
   includePartsValue: false,
   partsValue: 0,
@@ -306,7 +305,6 @@ export default function App() {
           materialItems: data.materialItems || [],
           pieces: data.pieces || [],
           status: data.status || 'em_espera',
-          arrivalDate: data.arrivalDate || '',
           deliveryDate: data.deliveryDate || '',
           onlyTotalValue: data.onlyTotalValue || false
         };
@@ -615,18 +613,10 @@ export default function App() {
     doc.text(`PLACA: ${currentNote.plate || '---'}`, 120, y);
     y += 7;
     doc.text(`STATUS: ${SERVICE_STATUS_LABELS[currentNote.status]}`, margin + 5, y);
-    y += 15;
-
-    // Dates Section (Moved to after header if needed, but let's keep it here for details)
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    if (currentNote.arrivalDate) {
-      doc.text(`ENTRADA: ${format(new Date(currentNote.arrivalDate + 'T12:00:00'), 'dd/MM/yyyy')}`, margin, y);
-    }
     if (currentNote.deliveryDate) {
-      doc.text(`PREVISÃO ENTREGA: ${format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}`, 120, y);
+      doc.text(`ENTREGA: ${format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}`, 120, y);
     }
-    y += 10;
+    y += 15;
 
     // Services Section
     const selectedPieces = currentNote.pieces.filter(p => p.selected);
@@ -976,42 +966,25 @@ export default function App() {
                 </div>
               </div>
 
-                <div className="card">
+              <div className="card">
+                <div className="flex justify-between items-start mb-2">
                   <h3 className="label-tech text-brand">Veículo</h3>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <p className="text-xl font-bold uppercase opacity-80">{currentNote.vehicleNameColor || 'NÃO INFORMADO'}</p>
-                      <p className="text-3xl font-black font-mono tracking-widest text-white mt-1">{currentNote.plate || '---'}</p>
-                    </div>
-                    <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
-                      currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
-                      currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
-                    }`}>
-                      {SERVICE_STATUS_LABELS[currentNote.status]}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-zinc-800">
-                    {currentNote.arrivalDate && (
-                      <div className="flex items-center gap-2 text-zinc-500 text-[9px] uppercase font-bold">
-                        <Clock size={12} className="text-brand" />
-                        <div>
-                          <p className="text-[7px] text-zinc-600 block">Chegada</p>
-                          <span>{format(new Date(currentNote.arrivalDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
-                        </div>
-                      </div>
-                    )}
-                    {currentNote.deliveryDate && (
-                      <div className="flex items-center gap-2 text-zinc-500 text-[9px] uppercase font-bold">
-                        <Calendar size={12} className="text-brand" />
-                        <div>
-                          <p className="text-[7px] text-zinc-600 block">Previsão Entrega</p>
-                          <span>{format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
-                        </div>
-                      </div>
-                    )}
+                  <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                    currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
+                    currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {SERVICE_STATUS_LABELS[currentNote.status]}
                   </div>
                 </div>
+                <p className="text-xl font-bold uppercase opacity-80">{currentNote.vehicleNameColor || 'NÃO INFORMADO'}</p>
+                <p className="text-3xl font-black font-mono tracking-widest text-white mt-1">{currentNote.plate || '---'}</p>
+                {currentNote.deliveryDate && (
+                  <div className="flex items-center gap-2 mt-3 text-zinc-500 text-[10px] uppercase font-bold">
+                    <Calendar size={12} className="text-brand" />
+                    <span>Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="card">
@@ -1212,7 +1185,7 @@ export default function App() {
                         placeholder="EX: GOLF - CINZA"
                       />
                     </div>
-                    <div className="grid grid-cols-1 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="label-tech">Placa do Veículo</label>
                         <input 
@@ -1221,6 +1194,15 @@ export default function App() {
                           onChange={e => setCurrentNote({ ...currentNote, plate: e.target.value.toUpperCase() })}
                           className="input-field font-mono" 
                           placeholder="ABC-1E23"
+                        />
+                      </div>
+                      <div>
+                        <label className="label-tech">Data de Entrega</label>
+                        <input 
+                          type="date" 
+                          value={currentNote.deliveryDate}
+                          onChange={e => setCurrentNote({ ...currentNote, deliveryDate: e.target.value })}
+                          className="input-field text-xs" 
                         />
                       </div>
                     </div>
@@ -1559,32 +1541,6 @@ export default function App() {
                 )}
 
                 <div className="card">
-                  <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center gap-2">
-                    <span className="w-1 h-3 bg-brand rounded-full"></span> AGENDAMENTO E PRAZOS
-                  </h2>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="label-tech">Data de Entrada</label>
-                      <input 
-                        type="date" 
-                        value={currentNote.arrivalDate}
-                        onChange={e => setCurrentNote({ ...currentNote, arrivalDate: e.target.value })}
-                        className="input-field text-xs text-brand" 
-                      />
-                    </div>
-                    <div>
-                      <label className="label-tech">Previsão de Entrega</label>
-                      <input 
-                        type="date" 
-                        value={currentNote.deliveryDate}
-                        onChange={e => setCurrentNote({ ...currentNote, deliveryDate: e.target.value })}
-                        className="input-field text-xs text-brand" 
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="card">
                   <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                        <span className="w-1 h-3 bg-brand rounded-full"></span>OBSERVAÇÕES GERAIS
@@ -1665,34 +1621,26 @@ export default function App() {
                     <p className="font-black text-xl italic tracking-tighter uppercase">{currentNote.customerName || 'NÃO INFORMADO'}</p>
                     <p className="text-zinc-500 font-mono text-xs mt-1">{currentNote.whatsapp}</p>
                   </div>
-                    <div className="border-b border-zinc-800 pb-4 flex justify-between items-start">
-                      <div>
-                        <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
-                          <span className="w-1 h-3 bg-brand rounded-full"></span>VEÍCULO
-                        </h2>
-                        <p className="font-bold opacity-80 uppercase">{currentNote.vehicleNameColor}</p>
-                        <p className="font-black text-2xl font-mono text-white tracking-widest mt-1">{currentNote.plate}</p>
-                        
-                        <div className="flex gap-4 mt-3">
-                          {currentNote.arrivalDate && (
-                            <p className="text-[9px] text-zinc-500 uppercase font-bold flex items-center gap-1">
-                              <Clock size={10} className="text-brand" /> Entrada: {format(new Date(currentNote.arrivalDate + 'T12:00:00'), 'dd/MM/yyyy')}
-                            </p>
-                          )}
-                          {currentNote.deliveryDate && (
-                            <p className="text-[9px] text-zinc-500 uppercase font-bold flex items-center gap-1">
-                              <Calendar size={10} className="text-brand" /> Previsão: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
-                        currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
-                        currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
-                      }`}>
-                        {SERVICE_STATUS_LABELS[currentNote.status]}
-                      </div>
+                  <div className="border-b border-zinc-800 pb-4 flex justify-between items-start">
+                    <div>
+                      <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
+                        <span className="w-1 h-3 bg-brand rounded-full"></span>VEÍCULO
+                      </h2>
+                      <p className="font-bold opacity-80 uppercase">{currentNote.vehicleNameColor}</p>
+                      <p className="font-black text-2xl font-mono text-white tracking-widest mt-1">{currentNote.plate}</p>
+                      {currentNote.deliveryDate && (
+                        <p className="text-[10px] text-zinc-500 mt-2 uppercase font-bold flex items-center gap-1">
+                          <Calendar size={10} /> Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}
+                        </p>
+                      )}
                     </div>
+                    <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                      currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
+                      currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {SERVICE_STATUS_LABELS[currentNote.status]}
+                    </div>
+                  </div>
                   <div>
                     <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
                        <span className="w-1 h-3 bg-brand rounded-full"></span>VALOR FINAL
