@@ -446,6 +446,17 @@ export default function App() {
     (currentNote.includeMaterialsValue ? Number(currentNote.materialsValue) : 0)
   );
 
+  const handleLogin = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      console.error('Erro ao fazer login:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -468,7 +479,7 @@ export default function App() {
         </p>
         
         <button 
-          onClick={signInWithGoogle}
+          onClick={handleLogin}
           className="w-full max-w-sm flex items-center justify-center gap-4 bg-white text-black font-black uppercase tracking-widest text-xs py-4 rounded-xl hover:bg-zinc-200 transition-all active:scale-95"
         >
           <LogIn size={20} />
