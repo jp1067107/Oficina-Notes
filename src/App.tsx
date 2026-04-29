@@ -12,7 +12,6 @@ import {
   ChevronRight, 
   ChevronLeft, 
   Check, 
-  Mic, 
   StopCircle, 
   Trash2, 
   Download, 
@@ -23,11 +22,17 @@ import {
   Edit2,
   LogOut,
   LogIn,
-  Loader2
+  Loader2,
+  Calendar,
+  Clock,
+  AudioLines,
+  History,
+  DollarSign,
+  PlusCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CAR_PIECES } from './constants';
-import { NoteData, ServicePiece } from './types';
+import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
+import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -102,6 +107,8 @@ const initialNote = (userId: string = ''): NoteData => ({
   plate: '',
   cpfCnpj: '',
   whatsapp: '',
+  status: 'em_espera',
+  deliveryDate: new Date().toISOString().split('T')[0],
   pieces: CAR_PIECES.map(p => ({ ...p, selected: false, description: '' })),
   includePartsValue: false,
   partsValue: 0,
@@ -109,7 +116,9 @@ const initialNote = (userId: string = ''): NoteData => ({
   laborValue: 0,
   includeMaterialsValue: false,
   materialsValue: 0,
+  onlyTotalValue: false,
   totalValue: 0,
+  materialItems: [],
   observations: '',
   isDraft: true,
   createdAt: new Date().toISOString(),
@@ -136,8 +145,6 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIframe, setIsIframe] = useState(false);
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
@@ -220,69 +227,10 @@ export default function App() {
     return () => window.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [currentNote, user, view, saveDraft]);
 
-  // PWA Install Logic
+  // Environment Check
   useEffect(() => {
     setIsIframe(window.self !== window.top);
-    
-    // Check if app is already installed
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-    
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-
-    if (isStandalone) {
-      setShowInstallBtn(false);
-      return;
-    }
-
-    // On iOS, we show the button but with instructions because beforeinstallprompt doesn't fire
-    if (isIOS) {
-      setShowInstallBtn(true);
-    }
-
-    const handleBeforeInstallPrompt = (e: any) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setShowInstallBtn(true);
-    };
-
-    const handleAppInstalled = () => {
-      setDeferredPrompt(null);
-      setShowInstallBtn(false);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-    };
   }, []);
-
-  const handleInstallClick = async () => {
-    if (isIframe) {
-      window.open(window.location.href, '_blank');
-      return;
-    }
-
-    if (!deferredPrompt) {
-      // iOS or browser that doesn't support beforeinstallprompt yet
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      if (isIOS) {
-        alert('Para instalar no seu iPhone/iPad:\n1. Toque no botão de Compartilhar (aquele quadrado com uma seta para cima).\n2. Role para baixo e selecione "Adicionar à Tela de Início".');
-      } else {
-        alert('Para instalar:\nAbra o menu do seu navegador (três pontinhos no Chrome) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".');
-      }
-      return;
-    }
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-      setShowInstallBtn(false);
-    }
-  };
 
   // Test Connection
   useEffect(() => {
@@ -350,7 +298,17 @@ export default function App() {
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const fetchedNotes = snapshot.docs.map(doc => doc.data() as NoteData);
+      const fetchedNotes = snapshot.docs.map(doc => {
+        const data = doc.data() as NoteData;
+        return {
+          ...data,
+          materialItems: data.materialItems || [],
+          pieces: data.pieces || [],
+          status: data.status || 'em_espera',
+          deliveryDate: data.deliveryDate || '',
+          onlyTotalValue: data.onlyTotalValue || false
+        };
+      });
       setNotes(fetchedNotes);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, path);
@@ -592,78 +550,180 @@ export default function App() {
     }));
   };
 
+  const calculateTotal = (note: NoteData) => {
+    if (note.onlyTotalValue) return note.totalValue;
+    
+    let total = 0;
+    if (note.includePartsValue) total += Number(note.partsValue);
+    if (note.includeLaborValue) total += Number(note.laborValue);
+    
+    // Sum material items if included
+    if (note.includeMaterialsValue) {
+      const itemsSum = (note.materialItems || []).reduce((acc, item) => acc + (item.price || 0), 0);
+      total += itemsSum > 0 ? itemsSum : Number(note.materialsValue);
+    }
+    
+    return total;
+  };
+
   const generatePDF = () => {
     const doc = new jsPDF();
     const margin = 20;
     let y = 20;
 
-    doc.setFontSize(22);
-    doc.text('Oficina Notes - Ordem de Serviço', margin, y);
-    y += 10;
+    // Header with better styling
+    doc.setFillColor(0, 0, 0);
+    doc.rect(0, 0, 210, 40, 'F');
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.text('OFICINA NOTES', margin, 25);
+    
     doc.setFontSize(10);
-    doc.text(`Gerado em: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text('ORDEM DE SERVIÇO / ORÇAMENTO', margin, 32);
+    
+    doc.setTextColor(150, 150, 150);
+    doc.text(`EMITIDO EM: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 190, 25, { align: 'right' });
+    
+    y = 55;
+    doc.setTextColor(0, 0, 0);
+    
+    // Customer and Vehicle Section
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DADOS DO CLIENTE E VEÍCULO', margin, y);
+    doc.line(margin, y + 2, 190, y + 2);
+    y += 10;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`NOME: ${currentNote.customerName || '---'}`, margin, y);
+    doc.text(`WHATSAPP: ${currentNote.whatsapp || '---'}`, 120, y);
+    y += 7;
+    doc.text(`CPF/CNPJ: ${currentNote.cpfCnpj || '---'}`, margin, y);
+    y += 10;
+    
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margin, y, 170, 25, 'F');
+    y += 8;
+    doc.setFont('helvetica', 'bold');
+    doc.text(`VEÍCULO: ${currentNote.vehicleNameColor || '---'}`, margin + 5, y);
+    doc.text(`PLACA: ${currentNote.plate || '---'}`, 120, y);
+    y += 7;
+    doc.text(`STATUS: ${SERVICE_STATUS_LABELS[currentNote.status]}`, margin + 5, y);
+    if (currentNote.deliveryDate) {
+      doc.text(`ENTREGA: ${format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}`, 120, y);
+    }
     y += 15;
 
-    doc.setFontSize(14);
-    doc.text('Dados do Cliente e Veículo', margin, y);
-    y += 10;
-    doc.setFontSize(11);
-    doc.text(`Cliente: ${currentNote.customerName}`, margin, y); y += 7;
-    doc.text(`CPF/CNPJ: ${currentNote.cpfCnpj}`, margin, y); y += 7;
-    doc.text(`WhatsApp: ${currentNote.whatsapp}`, margin, y); y += 7;
-    doc.text(`Veículo: ${currentNote.vehicleNameColor}`, margin, y); y += 7;
-    doc.text(`Placa: ${currentNote.plate}`, margin, y); y += 15;
-
+    // Services Section
     const selectedPieces = currentNote.pieces.filter(p => p.selected);
     if (selectedPieces.length > 0) {
-      doc.setFontSize(14);
-      doc.text('Serviços por Peça', margin, y);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('SERVIÇOS EXECUTADOS / NOTAS', margin, y);
+      doc.line(margin, y + 2, 190, y + 2);
       y += 10;
-      doc.setFontSize(11);
+      
+      doc.setFontSize(10);
       selectedPieces.forEach(p => {
         if (y > 270) { doc.addPage(); y = 20; }
         doc.setFont('helvetica', 'bold');
-        doc.text(`- ${p.label}:`, margin, y);
+        doc.text(`> ${p.label.toUpperCase()}`, margin, y);
         y += 6;
         doc.setFont('helvetica', 'normal');
-        const desc = doc.splitTextToSize(p.description || '(Sem descrição textual)', 170);
+        const desc = doc.splitTextToSize(p.description || '(Sem descrição detalhada)', 160);
         doc.text(desc, margin + 5, y);
-        y += desc.length * 6 + 4;
+        y += desc.length * 5 + 5;
       });
     }
 
-    y += 10;
-    doc.setFontSize(14);
-    doc.text('Financeiro', margin, y);
-    y += 10;
-    doc.setFontSize(11);
-    if (currentNote.includePartsValue) { doc.text(`Valor das Peças: R$ ${currentNote.partsValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
-    if (currentNote.includeLaborValue) { doc.text(`Mão de Obra: R$ ${currentNote.laborValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
-    if (currentNote.includeMaterialsValue) { doc.text(`Materiais: R$ ${currentNote.materialsValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
-    
-    y += 5;
-    doc.setFontSize(16);
-    doc.text(`VALOR TOTAL: R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y);
+    // Material Items Section
+    if ((currentNote.materialItems?.length || 0) > 0 && !currentNote.onlyTotalValue) {
+      if (y > 240) { doc.addPage(); y = 20; }
+      y += 5;
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('LISTAGEM DE PEÇAS E MATERIAIS', margin, y);
+      doc.line(margin, y + 2, 190, y + 2);
+      y += 10;
+      
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'bold');
+      doc.text('DESCRIÇÃO', margin, y);
+      doc.text('VALOR UNIT.', 190, y, { align: 'right' });
+      y += 6;
+      doc.setFont('helvetica', 'normal');
+      
+      (currentNote.materialItems || []).forEach(item => {
+        if (y > 275) { doc.addPage(); y = 20; }
+        doc.text(`${item.name}`, margin, y);
+        doc.text(`R$ ${item.price.toFixed(2)}`, 190, y, { align: 'right' });
+        y += 5;
+        doc.line(margin, y - 1, 190, y - 1, 'S');
+        y += 2;
+      });
+      y += 5;
+    }
 
+    // Financial Section
+    if (y > 240) { doc.addPage(); y = 20; }
+    y += 10;
+    doc.setFillColor(0, 0, 0);
+    doc.rect(margin, y, 170, 30, 'F');
+    y += 10;
+    
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    
+    if (currentNote.onlyTotalValue) {
+      doc.text(`RESUMO: VALOR TOTAL FECHADO`, margin + 5, y);
+    } else {
+      const parts = currentNote.includePartsValue ? `Peças: R$ ${currentNote.partsValue.toFixed(2)}` : '';
+      const labor = currentNote.includeLaborValue ? `Mão de Obra: R$ ${currentNote.laborValue.toFixed(2)}` : '';
+      const materials = currentNote.includeMaterialsValue ? `Materiais: R$ ${Number(currentNote.materialsValue).toFixed(2)}` : '';
+      doc.text(`${parts} ${parts && labor ? ' | ' : ''} ${labor} ${ (parts || labor) && materials ? ' | ' : ''} ${materials}`, margin + 5, y);
+    }
+    
+    y += 10;
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`TOTAL GERAL: R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin + 5, y);
+    
+    doc.setTextColor(0, 0, 0);
     if (currentNote.observations) {
-      y += 15;
+      y += 25;
       if (y > 270) { doc.addPage(); y = 20; }
-      doc.setFontSize(14);
-      doc.text('Observações Gerais', margin, y);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('OBSERVAÇÕES ADICIONAIS', margin, y);
       y += 8;
       doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
       const obs = doc.splitTextToSize(currentNote.observations, 170);
       doc.text(obs, margin, y);
     }
 
+    // Footer signature
+    doc.setFontSize(8);
+    doc.text('Assinatura do Responsável', 50, 285);
+    doc.line(20, 283, 80, 283);
+    doc.text('Assinatura do Cliente', 140, 285);
+    doc.line(110, 283, 170, 283);
+
     doc.save(`os_${currentNote.plate || 'nota'}_${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
 
-  const totalValue = (
-    (currentNote.includePartsValue ? Number(currentNote.partsValue) : 0) +
-    (currentNote.includeLaborValue ? Number(currentNote.laborValue) : 0) +
-    (currentNote.includeMaterialsValue ? Number(currentNote.materialsValue) : 0)
-  );
+  const totalValue = currentNote.onlyTotalValue 
+    ? currentNote.totalValue 
+    : (
+      (currentNote.includePartsValue ? Number(currentNote.partsValue) : 0) +
+      (currentNote.includeLaborValue ? Number(currentNote.laborValue) : 0) +
+      (currentNote.includeMaterialsValue ? Number(currentNote.materialsValue) : 0)
+    );
 
   const handleLogin = async () => {
     setSubscriptionError(null);
@@ -787,24 +847,6 @@ export default function App() {
             </div>
           </header>
 
-          {showInstallBtn && (
-            <motion.div 
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="px-4 pb-4"
-            >
-              <button 
-                onClick={handleInstallClick}
-                className="w-full bg-brand text-black font-black uppercase tracking-widest text-[10px] py-4 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse"
-              >
-                <div className="bg-black text-brand p-1 rounded-md">
-                  {isIframe ? <Download size={14} strokeWidth={3} /> : <Plus size={14} strokeWidth={3} />}
-                </div>
-                {isIframe ? '🌐 Abrir em nova aba para instalar' : '📲 Instalar Aplicativo no Celular'}
-              </button>
-            </motion.div>
-          )}
-
           <div className="relative flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-700" size={18} />
@@ -925,9 +967,23 @@ export default function App() {
               </div>
 
               <div className="card">
-                <h3 className="label-tech text-brand">Veículo</h3>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="label-tech text-brand">Veículo</h3>
+                  <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                    currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
+                    currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {SERVICE_STATUS_LABELS[currentNote.status]}
+                  </div>
+                </div>
                 <p className="text-xl font-bold uppercase opacity-80">{currentNote.vehicleNameColor || 'NÃO INFORMADO'}</p>
                 <p className="text-3xl font-black font-mono tracking-widest text-white mt-1">{currentNote.plate || '---'}</p>
+                {currentNote.deliveryDate && (
+                  <div className="flex items-center gap-2 mt-3 text-zinc-500 text-[10px] uppercase font-bold">
+                    <Calendar size={12} className="text-brand" />
+                    <span>Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -960,31 +1016,58 @@ export default function App() {
               </div>
             </div>
 
-            <div className="bg-brand p-6 rounded-xl text-black">
-              <h3 className="text-[10px] font-black uppercase tracking-widest mb-4">Resumo Financeiro</h3>
-              <div className="space-y-2 text-xs font-bold uppercase opacity-80 mb-4">
-                {currentNote.includePartsValue && (
-                  <div className="flex justify-between">
-                    <span>Peças</span>
-                    <span>R$ {currentNote.partsValue.toFixed(2)}</span>
+            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                <DollarSign size={80} />
+              </div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 text-zinc-500 flex items-center gap-2">
+                <span className="w-1 h-3 bg-brand rounded-full"></span>Resumo Financeiro
+              </h3>
+              <div className="space-y-2 text-xs font-bold uppercase opacity-80 mb-4 border-b border-zinc-800 pb-4">
+                {currentNote.onlyTotalValue ? (
+                  <div className="flex justify-between text-brand italic">
+                    <span>Valor Fechado</span>
+                    <span>R$ {currentNote.totalValue.toFixed(2)}</span>
                   </div>
-                )}
-                {currentNote.includeLaborValue && (
-                  <div className="flex justify-between">
-                    <span>Mão de Obra</span>
-                    <span>R$ {currentNote.laborValue.toFixed(2)}</span>
-                  </div>
-                )}
-                {currentNote.includeMaterialsValue && (
-                  <div className="flex justify-between">
-                    <span>Materiais</span>
-                    <span>R$ {currentNote.materialsValue.toFixed(2)}</span>
-                  </div>
+                ) : (
+                  <>
+                    {currentNote.includePartsValue && (
+                      <div className="flex justify-between">
+                        <span>Peças</span>
+                        <span>R$ {currentNote.partsValue.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {currentNote.includeLaborValue && (
+                      <div className="flex justify-between">
+                        <span>Mão de Obra</span>
+                        <span>R$ {currentNote.laborValue.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {currentNote.includeMaterialsValue && (
+                      <div className="flex justify-between">
+                        <span>Materiais</span>
+                        <span>R$ {currentNote.materialsValue.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-              <div className="pt-4 border-t border-black/20 flex justify-between items-end">
-                <span className="text-[10px] font-black uppercase opacity-60">Total</span>
-                <span className="text-3xl font-black italic tracking-tighter">
+              
+              {(currentNote.materialItems?.length || 0) > 0 && (
+                <div className="space-y-1 mb-4 border-b border-zinc-800 pb-4">
+                  <p className="text-[8px] text-zinc-600 mb-2 uppercase font-black">Detalhamento de Itens</p>
+                  {(currentNote.materialItems || []).map(item => (
+                    <div key={item.id} className="flex justify-between text-[10px] text-zinc-400">
+                      <span>{item.name}</span>
+                      <span className="font-mono">R$ {item.price.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-black uppercase text-zinc-500">Total Geral</span>
+                <span className="text-3xl font-black italic tracking-tighter text-brand drop-shadow-[0_0_15px_rgba(34,197,94,0.3)]">
                   R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
@@ -1102,15 +1185,45 @@ export default function App() {
                         placeholder="EX: GOLF - CINZA"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="label-tech">Placa do Veículo</label>
+                        <input 
+                          type="text" 
+                          value={currentNote.plate}
+                          onChange={e => setCurrentNote({ ...currentNote, plate: e.target.value.toUpperCase() })}
+                          className="input-field font-mono" 
+                          placeholder="ABC-1E23"
+                        />
+                      </div>
+                      <div>
+                        <label className="label-tech">Data de Entrega</label>
+                        <input 
+                          type="date" 
+                          value={currentNote.deliveryDate}
+                          onChange={e => setCurrentNote({ ...currentNote, deliveryDate: e.target.value })}
+                          className="input-field text-xs" 
+                        />
+                      </div>
+                    </div>
+
                     <div>
-                      <label className="label-tech">Placa do Veículo</label>
-                      <input 
-                        type="text" 
-                        value={currentNote.plate}
-                        onChange={e => setCurrentNote({ ...currentNote, plate: e.target.value.toUpperCase() })}
-                        className="input-field font-mono" 
-                        placeholder="ABC-1E23"
-                      />
+                      <label className="label-tech">Status do Serviço</label>
+                      <div className="flex gap-2 mt-2">
+                        {(Object.keys(SERVICE_STATUS_LABELS) as ServiceStatus[]).map(statusKey => (
+                          <button
+                            key={statusKey}
+                            onClick={() => setCurrentNote({ ...currentNote, status: statusKey })}
+                            className={`flex-1 py-3 px-1 rounded border text-[9px] font-black uppercase tracking-tighter transition-all ${
+                              currentNote.status === statusKey 
+                                ? 'bg-brand border-brand text-black shadow-[0_0_10px_var(--color-brand-glow)]' 
+                                : 'bg-black/40 border-zinc-800 text-zinc-500'
+                            }`}
+                          >
+                            {SERVICE_STATUS_LABELS[statusKey]}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1188,7 +1301,7 @@ export default function App() {
                                 className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
                                 title="Gravar Áudio e Transcrever"
                               >
-                                <Mic size={16} strokeWidth={3} />
+                                <AudioLines size={16} strokeWidth={3} />
                               </button>
                               <button 
                                 onClick={() => startDictation(piece.id)}
@@ -1237,94 +1350,195 @@ export default function App() {
                 className="space-y-6"
               >
                 <div className="bg-brand border border-brand/50 p-6 rounded-xl text-black">
-                  <h2 className="text-xs font-black uppercase mb-4 tracking-widest italic flex items-center gap-2">
+                  <h2 className="text-xs font-black uppercase mb-4 tracking-widest italic flex items-center justify-between underline decoration-black/20 underline-offset-4">
                     ORÇAMENTO FINAL
+                    <div className="flex items-center gap-2 no-underline">
+                      <input 
+                        type="checkbox" 
+                        id="onlyTotal"
+                        checked={currentNote.onlyTotalValue}
+                        onChange={e => setCurrentNote({ ...currentNote, onlyTotalValue: e.target.checked })}
+                        className="w-4 h-4 accent-black"
+                      />
+                      <label htmlFor="onlyTotal" className="text-[9px] font-black">APENAS TOTAL</label>
+                    </div>
                   </h2>
+                  
                   <div className="space-y-3 mb-6">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <input 
-                            type="checkbox" 
-                            id="incParts"
-                            checked={currentNote.includePartsValue}
-                            onChange={e => setCurrentNote({ ...currentNote, includePartsValue: e.target.checked })}
-                            className="w-4 h-4 accent-black"
-                          />
-                          <label htmlFor="incParts" className="text-[10px] font-black uppercase">Peças</label>
-                        </div>
-                        {currentNote.includePartsValue && (
-                          <div className="w-24">
-                            <input 
-                              type="number" 
-                              step="0.01"
-                              value={currentNote.partsValue || ''}
-                              onChange={e => setCurrentNote({ ...currentNote, partsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
-                              className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
-                            />
+                    {!currentNote.onlyTotalValue ? (
+                      <>
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="checkbox" 
+                                id="incParts"
+                                checked={currentNote.includePartsValue}
+                                onChange={e => setCurrentNote({ ...currentNote, includePartsValue: e.target.checked })}
+                                className="w-4 h-4 accent-black"
+                              />
+                              <label htmlFor="incParts" className="text-[10px] font-black uppercase">Peças</label>
+                            </div>
+                            {currentNote.includePartsValue && (
+                              <div className="w-24">
+                                <input 
+                                  type="number" 
+                                  step="0.01"
+                                  value={currentNote.partsValue || ''}
+                                  onChange={e => setCurrentNote({ ...currentNote, partsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                  className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
+                                />
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
 
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="incLabor"
-                          checked={currentNote.includeLaborValue}
-                          onChange={e => setCurrentNote({ ...currentNote, includeLaborValue: e.target.checked })}
-                          className="w-4 h-4 accent-black"
-                        />
-                        <label htmlFor="incLabor" className="text-[10px] font-black uppercase">Mão de Obra</label>
-                      </div>
-                      {currentNote.includeLaborValue && (
-                        <div className="w-24">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              id="incLabor"
+                              checked={currentNote.includeLaborValue}
+                              onChange={e => setCurrentNote({ ...currentNote, includeLaborValue: e.target.checked })}
+                              className="w-4 h-4 accent-black"
+                            />
+                            <label htmlFor="incLabor" className="text-[10px] font-black uppercase">Mão de Obra</label>
+                          </div>
+                          {currentNote.includeLaborValue && (
+                            <div className="w-24">
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                value={currentNote.laborValue || ''}
+                                onChange={e => setCurrentNote({ ...currentNote, laborValue: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox" 
+                              id="incMat"
+                              checked={currentNote.includeMaterialsValue}
+                              onChange={e => setCurrentNote({ ...currentNote, includeMaterialsValue: e.target.checked })}
+                              className="w-4 h-4 accent-black"
+                            />
+                            <label htmlFor="incMat" className="text-[10px] font-black uppercase">Materiais</label>
+                          </div>
+                          {currentNote.includeMaterialsValue && (
+                            <div className="w-24">
+                              <input 
+                                type="number" 
+                                step="0.01"
+                                value={currentNote.materialsValue || ''}
+                                onChange={e => setCurrentNote({ ...currentNote, materialsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
+                                className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between bg-black/10 p-4 rounded-xl border border-black/10">
+                        <label className="text-[10px] font-black uppercase">Valor Total do Serviço</label>
+                        <div className="w-40">
                           <input 
                             type="number" 
                             step="0.01"
-                            value={currentNote.laborValue || ''}
-                            onChange={e => setCurrentNote({ ...currentNote, laborValue: e.target.value === '' ? 0 : Number(e.target.value) })}
-                            className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
+                            value={currentNote.totalValue || ''}
+                            onChange={e => setCurrentNote({ ...currentNote, totalValue: e.target.value === '' ? 0 : Number(e.target.value) })}
+                            className="w-full bg-transparent border-b-2 border-black/30 text-2xl font-black font-mono py-1 rounded-none outline-none focus:border-black text-right"
+                            placeholder="0,00"
                           />
                         </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="checkbox" 
-                          id="incMat"
-                          checked={currentNote.includeMaterialsValue}
-                          onChange={e => setCurrentNote({ ...currentNote, includeMaterialsValue: e.target.checked })}
-                          className="w-4 h-4 accent-black"
-                        />
-                        <label htmlFor="incMat" className="text-[10px] font-black uppercase">Materiais</label>
                       </div>
-                      {currentNote.includeMaterialsValue && (
-                        <div className="w-24">
-                          <input 
-                            type="number" 
-                            step="0.01"
-                            value={currentNote.materialsValue || ''}
-                            onChange={e => setCurrentNote({ ...currentNote, materialsValue: e.target.value === '' ? 0 : Number(e.target.value) })}
-                            className="w-full bg-transparent border-b border-black/30 text-xs font-bold font-mono py-1 rounded-none outline-none focus:border-black"
-                          />
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
 
                   <div className="pt-4 border-t border-black/20">
                     <div className="flex justify-between items-end">
-                      <span className="text-[10px] font-black uppercase opacity-60">Valor total</span>
+                      <span className="text-[10px] font-black uppercase opacity-60">Valor total calculado</span>
                       <span className="text-3xl font-black italic tracking-tighter">
                         R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                     </div>
                   </div>
                 </div>
+
+                {(currentNote.includePartsValue || currentNote.includeMaterialsValue) && !currentNote.onlyTotalValue && (
+                  <div className="card border-t-4 border-t-brand">
+                    <h2 className="text-[10px] font-black text-brand uppercase mb-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                         <span className="w-1 h-3 bg-brand rounded-full"></span>LISTA DE MATERIAIS / PEÇAS
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const newItem: MaterialItem = { id: crypto.randomUUID(), name: '', price: 0 };
+                          setCurrentNote({ ...currentNote, materialItems: [...currentNote.materialItems, newItem] });
+                        }}
+                        className="text-[10px] bg-brand text-black px-3 py-1.5 rounded font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
+                      >
+                        <PlusCircle size={14} /> ADICIONAR ITEM
+                      </button>
+                    </h2>
+                    
+                    <div className="space-y-3">
+                      {(currentNote.materialItems?.length || 0) === 0 ? (
+                        <div className="p-8 border border-zinc-900 border-dashed rounded-xl text-center">
+                          <p className="text-[10px] text-zinc-600 italic uppercase">Adicione itens para detalhar as peças ou materiais utilizados.</p>
+                        </div>
+                      ) : (
+                        (currentNote.materialItems || []).map((item, idx) => (
+                          <div key={item.id} className="flex gap-2 items-end group bg-black/40 p-2 rounded-lg border border-zinc-900 shadow-sm">
+                            <div className="flex-1">
+                              {idx === 0 && <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">Item/Peça</label>}
+                              <input 
+                                type="text"
+                                value={item.name}
+                                placeholder="EX: LAMPADA H7"
+                                onChange={e => {
+                                  const newList = [...currentNote.materialItems];
+                                  newList[idx].name = e.target.value.toUpperCase();
+                                  setCurrentNote({ ...currentNote, materialItems: newList });
+                                }}
+                                className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 outline-none focus:border-brand font-medium"
+                              />
+                            </div>
+                            <div className="w-24">
+                              {idx === 0 && <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">Preço (R$)</label>}
+                              <div className="relative">
+                                <span className="absolute left-0 bottom-2 text-zinc-600 text-[10px]">R$</span>
+                                <input 
+                                  type="number"
+                                  value={item.price || ''}
+                                  placeholder="0,00"
+                                  onChange={e => {
+                                    const newList = [...currentNote.materialItems];
+                                    newList[idx].price = e.target.value === '' ? 0 : Number(e.target.value);
+                                    setCurrentNote({ ...currentNote, materialItems: newList });
+                                  }}
+                                  className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 pl-5 outline-none focus:border-brand font-mono font-bold"
+                                />
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newList = (currentNote.materialItems || []).filter(i => i.id !== item.id);
+                                setCurrentNote({ ...currentNote, materialItems: newList });
+                              }}
+                              className="text-zinc-700 hover:text-red-500 p-2 opacity-50 group-hover:opacity-100 transition-all"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="card">
                   <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center justify-between">
@@ -1340,18 +1554,45 @@ export default function App() {
                       ) : isRecording === 'observations' ? (
                         <button 
                           onClick={stopRecording}
-                          className="bg-red-600 text-white p-1.5 rounded animate-pulse"
+                          className="bg-red-600 text-white p-1.5 rounded animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]"
                         >
                           <StopCircle size={14} strokeWidth={3} />
                         </button>
                       ) : (
-                        <button 
-                          onClick={() => startRecording('observations')}
-                          className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
-                          title="Falar para escrever"
-                        >
-                          <Mic size={14} strokeWidth={3} />
-                        </button>
+                        <div className="flex gap-1">
+                          <button 
+                            onClick={() => startRecording('observations')}
+                            className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
+                            title="Gravar Áudio e Transcrever"
+                          >
+                            <AudioLines size={14} strokeWidth={3} />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                              if (!SpeechRecognition) {
+                                alert('Seu navegador não suporta reconhecimento de voz.');
+                                return;
+                              }
+                              const recognition = new SpeechRecognition();
+                              recognition.lang = 'pt-BR';
+                              recognition.onstart = () => setIsListening('observations');
+                              recognition.onend = () => setIsListening(null);
+                              recognition.onresult = (event: any) => {
+                                const transcript = event.results[0][0].transcript;
+                                setCurrentNote(prev => ({
+                                  ...prev,
+                                  observations: prev.observations + (prev.observations ? ' ' : '') + transcript
+                                }));
+                              };
+                              recognition.start();
+                            }}
+                            className={`p-1.5 rounded transition-colors ${isListening === 'observations' ? 'bg-brand text-black' : 'bg-zinc-800 text-brand hover:bg-zinc-700'}`}
+                            title="Ditado nativo"
+                          >
+                            <FileText size={14} strokeWidth={3} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </h2>
@@ -1380,23 +1621,70 @@ export default function App() {
                     <p className="font-black text-xl italic tracking-tighter uppercase">{currentNote.customerName || 'NÃO INFORMADO'}</p>
                     <p className="text-zinc-500 font-mono text-xs mt-1">{currentNote.whatsapp}</p>
                   </div>
-                  <div className="border-b border-zinc-800 pb-4">
-                    <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
-                       <span className="w-1 h-3 bg-brand rounded-full"></span>VEÍCULO
-                    </h2>
-                    <p className="font-bold opacity-80 uppercase">{currentNote.vehicleNameColor}</p>
-                    <p className="font-black text-2xl font-mono text-white tracking-widest mt-1">{currentNote.plate}</p>
+                  <div className="border-b border-zinc-800 pb-4 flex justify-between items-start">
+                    <div>
+                      <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
+                        <span className="w-1 h-3 bg-brand rounded-full"></span>VEÍCULO
+                      </h2>
+                      <p className="font-bold opacity-80 uppercase">{currentNote.vehicleNameColor}</p>
+                      <p className="font-black text-2xl font-mono text-white tracking-widest mt-1">{currentNote.plate}</p>
+                      {currentNote.deliveryDate && (
+                        <p className="text-[10px] text-zinc-500 mt-2 uppercase font-bold flex items-center gap-1">
+                          <Calendar size={10} /> Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}
+                        </p>
+                      )}
+                    </div>
+                    <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                      currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :
+                      currentNote.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                    }`}>
+                      {SERVICE_STATUS_LABELS[currentNote.status]}
+                    </div>
                   </div>
                   <div>
                     <h2 className="text-[10px] font-black text-brand uppercase mb-3 flex items-center gap-2">
                        <span className="w-1 h-3 bg-brand rounded-full"></span>VALOR FINAL
                     </h2>
                     <div className="flex flex-col gap-1">
-                      <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase">
-                        <span>Serviços & Peças:</span>
-                        <span>R$ {totalValue.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-end">
+                      {!currentNote.onlyTotalValue ? (
+                        <>
+                          {currentNote.includePartsValue && (
+                            <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase">
+                              <span>Peças:</span>
+                              <span>R$ {currentNote.partsValue.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {currentNote.includeLaborValue && (
+                            <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase">
+                              <span>Mão de Obra:</span>
+                              <span>R$ {currentNote.laborValue.toFixed(2)}</span>
+                            </div>
+                          )}
+                          {currentNote.includeMaterialsValue && (
+                            <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase">
+                              <span>Materiais:</span>
+                              <span>R$ {currentNote.materialsValue.toFixed(2)}</span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex justify-between font-mono text-[10px] opacity-60 uppercase italic">
+                          <span>Valor Fechado:</span>
+                        </div>
+                      )}
+                      
+                      {(currentNote.materialItems?.length || 0) > 0 && !currentNote.onlyTotalValue && (
+                         <div className="mt-2 pt-2 border-t border-zinc-800/50 space-y-1">
+                           {(currentNote.materialItems || []).map(item => (
+                             <div key={item.id} className="flex justify-between text-[8px] text-zinc-500 uppercase">
+                               <span>{item.name}</span>
+                               <span className="font-mono">R$ {item.price.toFixed(2)}</span>
+                             </div>
+                           ))}
+                         </div>
+                      )}
+
+                      <div className="flex justify-between items-end mt-2">
                         <span className="text-3xl font-black italic tracking-tighter text-brand">
                           R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>

@@ -1,4 +1,10 @@
 
+export const SERVICE_STATUS_LABELS = {
+  em_espera: 'Em Espera',
+  na_oficina: 'Na Oficina',
+  finalizado: 'Finalizado',
+};
+
 export const CAR_PIECES = [
   { id: 'pd', label: 'Para-choque Dianteiro' },
   { id: 'pt', label: 'Para-choque Traseiro' },
