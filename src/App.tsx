@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { GoogleGenAI } from "@google/genai";
 import { 
   Plus, 
   FileText, 
@@ -21,7 +22,8 @@ import {
   Square,
   Edit2,
   LogOut,
-  LogIn
+  LogIn,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES } from './constants';
@@ -125,12 +127,47 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [isRecording, setIsRecording] = useState<string | null>(null);
   const [isListening, setIsListening] = useState<string | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIframe, setIsIframe] = useState(false);
+
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
+  const transcribeAudio = async (base64Audio: string): Promise<string> => {
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn('GEMINI_API_KEY not found');
+      return '';
+    }
+    
+    try {
+      // Remove base64 prefix if exists
+      const base64Data = base64Audio.includes(',') ? base64Audio.split(',')[1] : base64Audio;
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            text: "Transcreva este áudio de oficina mecânica. Retorne apenas o texto transcrito, de forma clara e profissional em português. Se não houver fala clara, retorne apenas o que puder entender ou nada se for apenas ruído."
+          },
+          {
+            inlineData: {
+              mimeType: "audio/webm",
+              data: base64Data
+            }
+          }
+        ]
+      });
+      
+      return response.text || '';
+    } catch (error) {
+      console.error('Error transcribing audio:', error);
+      return '';
+    }
+  };
 
   const saveDraft = useCallback(async (note: NoteData) => {
     if (!user) return;
@@ -402,9 +439,33 @@ export default function App() {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
           const base64Audio = reader.result as string;
-          updatePiece(pieceId, { audioBlob: base64Audio });
+          
+          if (pieceId === 'observations') {
+            setIsTranscribing('observations');
+            const transcription = await transcribeAudio(base64Audio);
+            if (transcription) {
+              setCurrentNote(prev => ({
+                ...prev,
+                observations: prev.observations + (prev.observations ? ' ' : '') + transcription
+              }));
+            }
+            setIsTranscribing(null);
+          } else {
+            updatePiece(pieceId, { audioBlob: base64Audio });
+            // Optionally transcribe for pieces too if the user wants
+            setIsTranscribing(pieceId);
+            const transcription = await transcribeAudio(base64Audio);
+            if (transcription) {
+              updatePiece(pieceId, { 
+                description: (currentNote.pieces.find(p => p.id === pieceId)?.description || '') + 
+                           (currentNote.pieces.find(p => p.id === pieceId)?.description ? ' ' : '') + 
+                           transcription 
+              });
+            }
+            setIsTranscribing(null);
+          }
         };
       };
 
@@ -552,13 +613,13 @@ export default function App() {
     doc.text('Financeiro', margin, y);
     y += 10;
     doc.setFontSize(11);
-    if (currentNote.includePartsValue) { doc.text(`Valor das Peças: R$ ${currentNote.partsValue}`, margin, y); y += 7; }
-    if (currentNote.includeLaborValue) { doc.text(`Mão de Obra: R$ ${currentNote.laborValue}`, margin, y); y += 7; }
-    if (currentNote.includeMaterialsValue) { doc.text(`Materiais: R$ ${currentNote.materialsValue}`, margin, y); y += 7; }
+    if (currentNote.includePartsValue) { doc.text(`Valor das Peças: R$ ${currentNote.partsValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
+    if (currentNote.includeLaborValue) { doc.text(`Mão de Obra: R$ ${currentNote.laborValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
+    if (currentNote.includeMaterialsValue) { doc.text(`Materiais: R$ ${currentNote.materialsValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y); y += 7; }
     
     y += 5;
     doc.setFontSize(16);
-    doc.text(`VALOR TOTAL: R$ ${currentNote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y);
+    doc.text(`VALOR TOTAL: R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, margin, y);
 
     if (currentNote.observations) {
       y += 15;
@@ -900,7 +961,7 @@ export default function App() {
               <div className="pt-4 border-t border-black/20 flex justify-between items-end">
                 <span className="text-[10px] font-black uppercase opacity-60">Total</span>
                 <span className="text-3xl font-black italic tracking-tighter">
-                  R$ {currentNote.totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
@@ -918,7 +979,7 @@ export default function App() {
               </button>
               <button 
                 onClick={() => {
-                  const message = `*OFICINA NOTES - ORDEM DE SERVIÇO*\n\n*CLIENTE:* ${currentNote.customerName}\n*VEÍCULO:* ${currentNote.vehicleNameColor}\n*PLACA:* ${currentNote.plate}\n*TOTAL:* R$ ${currentNote.totalValue.toFixed(2)}`;
+                  const message = `*OFICINA NOTES - ORDEM DE SERVIÇO*\n\n*CLIENTE:* ${currentNote.customerName}\n*VEÍCULO:* ${currentNote.vehicleNameColor}\n*PLACA:* ${currentNote.plate}\n*TOTAL:* R$ ${totalValue.toFixed(2)}`;
                   window.open(`https://wa.me/${currentNote.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`, '_blank');
                 }}
                 className="bg-[#25D366] text-black font-black uppercase tracking-widest text-[10px] py-4 rounded flex items-center justify-center gap-2"
@@ -1084,7 +1145,12 @@ export default function App() {
                       <div className="flex justify-between items-center bg-black/40 -mx-4 -mt-4 p-3 mb-3 border-b border-zinc-800 rounded-t-xl">
                         <h3 className="font-black text-brand text-[11px] tracking-widest uppercase">{piece.label}</h3>
                         <div className="flex gap-2">
-                           {isRecording === piece.id ? (
+                           {isTranscribing === piece.id ? (
+                            <div className="flex items-center gap-1 text-[10px] text-brand">
+                              <Loader2 size={12} className="animate-spin" />
+                              <span>...</span>
+                            </div>
+                           ) : isRecording === piece.id ? (
                             <button 
                               onClick={stopRecording}
                               className="bg-red-600 text-white p-1.5 rounded animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]"
@@ -1096,20 +1162,20 @@ export default function App() {
                               <button 
                                 onClick={() => startRecording(piece.id)}
                                 className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
-                                title="Gravar Áudio"
+                                title="Gravar Áudio e Transcrever"
                               >
                                 <Mic size={16} strokeWidth={3} />
                               </button>
                               <button 
                                 onClick={() => startDictation(piece.id)}
                                 className={`p-1.5 rounded transition-colors ${isListening === piece.id ? 'bg-brand text-black' : 'bg-zinc-800 text-brand hover:bg-zinc-700'}`}
-                                title="Falar para escrever"
+                                title="Falar para escrever (Nativo)"
                               >
                                 <FileText size={16} strokeWidth={3} />
                               </button>
                             </div>
                            )}
-                           {piece.audioBlob && (
+                           {piece.audioBlob && isTranscribing !== piece.id && (
                              <div className="flex gap-1">
                                <button 
                                 onClick={() => playAudio(piece.audioBlob!)}
@@ -1237,11 +1303,36 @@ export default function App() {
                 </div>
 
                 <div className="card">
-                  <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center gap-2">
-                    <span className="w-1 h-3 bg-brand rounded-full"></span>OBSERVAÇÕES GERAIS
+                  <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                       <span className="w-1 h-3 bg-brand rounded-full"></span>OBSERVAÇÕES GERAIS
+                    </div>
+                    <div className="flex gap-2">
+                      {isTranscribing === 'observations' ? (
+                        <div className="flex items-center gap-1 text-[10px] text-brand">
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>TRANSCREVENDO...</span>
+                        </div>
+                      ) : isRecording === 'observations' ? (
+                        <button 
+                          onClick={stopRecording}
+                          className="bg-red-600 text-white p-1.5 rounded animate-pulse"
+                        >
+                          <StopCircle size={14} strokeWidth={3} />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={() => startRecording('observations')}
+                          className="bg-zinc-800 text-brand p-1.5 rounded hover:bg-zinc-700 transition-colors"
+                          title="Falar para escrever"
+                        >
+                          <Mic size={14} strokeWidth={3} />
+                        </button>
+                      )}
+                    </div>
                   </h2>
                   <textarea 
-                    className="bg-black border border-zinc-800 p-3 text-xs text-zinc-300 rounded focus:border-brand outline-none resize-none w-full min-h-[100px] mt-2"
+                    className="bg-black border border-zinc-800 p-3 text-xs text-zinc-300 rounded focus:border-brand outline-none resize-none w-full min-h-[100px] mt-2 font-medium"
                     placeholder="OUTROS ITENS OU OBSERVAÇÕES..."
                     value={currentNote.observations}
                     onChange={e => setCurrentNote({ ...currentNote, observations: e.target.value })}
