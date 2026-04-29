@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "ServicePiece": {
+      "title": "Service Piece",
+      "description": "Details of a specific car piece being serviced",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "selected": { "type": "boolean" },
+        "description": { "type": "string" },
+        "audioBlob": { "type": "string", "description": "Base64 encoded audio" }
+      },
+      "required": ["id", "label", "selected"]
+    },
+    "Note": {
+      "title": "Service Order Note",
+      "description": "The main service order document",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string", "description": "Owner of the note" },
+        "customerName": { "type": "string" },
+        "vehicleNameColor": { "type": "string" },
+        "plate": { "type": "string" },
+        "cpfCnpj": { "type": "string" },
+        "whatsapp": { "type": "string" },
+        "pieces": {
+          "type": "array",
+          "items": { "$ref": "#/entities/ServicePiece" }
+        },
+        "includePartsValue": { "type": "boolean" },
+        "partsValue": { "type": "number" },
+        "includeLaborValue": { "type": "boolean" },
+        "laborValue": { "type": "number" },
+        "includeMaterialsValue": { "type": "boolean" },
+        "materialsValue": { "type": "number" },
+        "totalValue": { "type": "number" },
+        "observations": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "customerName", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "notes": {
+      "schema": "Note",
+      "description": "Collection of all service orders"
+    }
+  }
+}

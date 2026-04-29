@@ -9,6 +9,7 @@ export interface ServicePiece {
 
 export interface NoteData {
   id: string;
+  userId: string;
   customerName: string;
   vehicleNameColor: string;
   plate: string;

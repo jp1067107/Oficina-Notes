@@ -19,19 +19,81 @@ import {
   X,
   Play,
   Square,
-  Edit2
+  Edit2,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES } from './constants';
 import { NoteData, ServicePiece } from './types';
-import localforage from 'localforage';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
+import { auth, db, signInWithGoogle } from './lib/firebase';
+import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  where, 
+  setDoc, 
+  deleteDoc, 
+  doc, 
+  orderBy,
+  getDocFromServer
+} from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // Initialize Note
-const initialNote = (): NoteData => ({
+const initialNote = (userId: string = ''): NoteData => ({
   id: crypto.randomUUID(),
+  userId,
   customerName: '',
   vehicleNameColor: '',
   plate: '',
@@ -51,6 +113,8 @@ const initialNote = (): NoteData => ({
 });
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'editor' | 'details'>('list');
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [currentNote, setCurrentNote] = useState<NoteData>(initialNote());
@@ -60,24 +124,87 @@ export default function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState(false);
 
-  // Load notes
+  // PWA Install Logic
   useEffect(() => {
-    const loadNotes = async () => {
-      const storedNotes = await localforage.getItem<NoteData[]>('oficina_notes');
-      if (storedNotes) setNotes(storedNotes);
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    if (isStandalone) return;
+
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
     };
-    loadNotes();
+
+    window.addEventListener('beforeinstallprompt', handler);
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // Save notes
-  const saveNotesToStorage = async (updatedNotes: NoteData[]) => {
-    setNotes(updatedNotes);
-    await localforage.setItem('oficina_notes', updatedNotes);
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+      setShowInstallBtn(false);
+    }
   };
 
+  // Test Connection
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
+  // Auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+      if (u) {
+        setCurrentNote(initialNote(u.uid));
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  // Load notes from Firestore
+  useEffect(() => {
+    if (!user) {
+      setNotes([]);
+      return;
+    }
+
+    const path = 'notes';
+    const q = query(
+      collection(db, path),
+      where('userId', '==', user.uid),
+      orderBy('updatedAt', 'desc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const fetchedNotes = snapshot.docs.map(doc => doc.data() as NoteData);
+      setNotes(fetchedNotes);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, path);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
   const handleCreateNote = () => {
-    setCurrentNote(initialNote());
+    setCurrentNote(initialNote(user?.uid || ''));
     setStep(1);
     setView('editor');
   };
@@ -90,40 +217,45 @@ export default function App() {
   const handleDeleteNote = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Tem certeza que deseja excluir esta nota?')) {
-      const updatedNotes = notes.filter(n => n.id !== id);
-      await saveNotesToStorage(updatedNotes);
+      const path = `notes/${id}`;
+      try {
+        await deleteDoc(doc(db, 'notes', id));
+      } catch (error) {
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
     }
   };
 
   const saveCurrentNote = async () => {
+    if (!user) return;
     const now = new Date().toISOString();
-    const noteToSave = { ...currentNote, updatedAt: now };
     
     // Calculate total
     let total = 0;
-    if (noteToSave.includePartsValue) total += Number(noteToSave.partsValue);
-    if (noteToSave.includeLaborValue) total += Number(noteToSave.laborValue);
-    if (noteToSave.includeMaterialsValue) total += Number(noteToSave.materialsValue);
-    noteToSave.totalValue = total;
-
-    const existingIndex = notes.findIndex(n => n.id === noteToSave.id);
-    let updatedNotes: NoteData[];
+    if (currentNote.includePartsValue) total += Number(currentNote.partsValue);
+    if (currentNote.includeLaborValue) total += Number(currentNote.laborValue);
+    if (currentNote.includeMaterialsValue) total += Number(currentNote.materialsValue);
     
-    if (existingIndex >= 0) {
-      updatedNotes = [...notes];
-      updatedNotes[existingIndex] = noteToSave;
-    } else {
-      updatedNotes = [noteToSave, ...notes];
+    const noteToSave: NoteData = { 
+      ...currentNote, 
+      totalValue: total,
+      updatedAt: now,
+      userId: user.uid 
+    };
+    
+    const path = `notes/${noteToSave.id}`;
+    try {
+      await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
+      setView('list');
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#22c55e', '#ffffff']
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, path);
     }
-
-    await saveNotesToStorage(updatedNotes);
-    setView('list');
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#22c55e', '#ffffff']
-    });
   };
 
   // Audio Recording
@@ -314,6 +446,42 @@ export default function App() {
     (currentNote.includeMaterialsValue ? Number(currentNote.materialsValue) : 0)
   );
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
+        <div className="w-20 h-20 bg-brand rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
+          <FileText className="text-black" size={40} strokeWidth={3} />
+        </div>
+        <h1 className="text-4xl font-black italic tracking-tighter mb-2 text-center">
+          OFICINA<span className="text-brand">NOTES</span>
+        </h1>
+        <p className="text-zinc-500 text-center mb-12 uppercase tracking-widest text-[10px] font-bold">
+          Gestão Profissional para sua Oficina
+        </p>
+        
+        <button 
+          onClick={signInWithGoogle}
+          className="w-full max-w-sm flex items-center justify-center gap-4 bg-white text-black font-black uppercase tracking-widest text-xs py-4 rounded-xl hover:bg-zinc-200 transition-all active:scale-95"
+        >
+          <LogIn size={20} />
+          Entrar com Google
+        </button>
+        
+        <p className="mt-8 text-zinc-700 text-[9px] uppercase tracking-[0.2em]">
+          Powered by Antigravity
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-20 max-w-lg mx-auto">
       {view === 'list' ? (
@@ -327,13 +495,40 @@ export default function App() {
                 OFICINA<span className="text-brand">NOTES</span>
               </h1>
             </div>
-            <button 
-              onClick={handleCreateNote}
-              className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
-            >
-              <Plus size={24} strokeWidth={3} />
-            </button>
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={handleCreateNote}
+                className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
+              >
+                <Plus size={24} strokeWidth={3} />
+              </button>
+              <button 
+                onClick={() => signOut(auth)}
+                className="bg-zinc-900 text-zinc-500 p-3 rounded hover:text-red-500 transition-colors"
+                title="Sair"
+              >
+                <LogOut size={24} />
+              </button>
+            </div>
           </header>
+
+          {showInstallBtn && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="px-4 pb-4"
+            >
+              <button 
+                onClick={handleInstallClick}
+                className="w-full bg-brand text-black font-black uppercase tracking-widest text-[10px] py-4 rounded-xl flex items-center justify-center gap-3 shadow-[0_0_20px_rgba(34,197,94,0.3)] animate-pulse"
+              >
+                <div className="bg-black text-brand p-1 rounded-md">
+                  <Download size={14} strokeWidth={3} />
+                </div>
+                📲 Instalar Aplicativo no Celular
+              </button>
+            </motion.div>
+          )}
 
           <div className="relative flex gap-2">
             <div className="relative flex-1">
