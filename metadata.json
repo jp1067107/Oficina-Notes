@@ -1,0 +1,6 @@
+{
+  "name": "Oficina Notes",
+  "description": "App de gerenciamento de ordens de serviço para funilarias com suporte a áudio e exportação em PDF.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": []
+}
