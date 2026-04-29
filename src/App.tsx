@@ -119,6 +119,8 @@ const initialNote = (userId: string = ''): NoteData => ({
 // Main Application Component
 // Note: Transcription via AI requires a valid GEMINI_API_KEY set in the environment.
 // Deployment Note: If deployment fails with CustomOrgPolicyException, please check Org Policies for run.managed.requireInvokerIam.
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,11 +140,9 @@ export default function App() {
   const [showInstallBtn, setShowInstallBtn] = useState(false);
   const [isIframe, setIsIframe] = useState(false);
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
-
-  const transcribeAudio = async (base64Audio: string): Promise<string> => {
+  const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
-      console.warn('GEMINI_API_KEY not found');
+      console.error('Configuração ausente: GEMINI_API_KEY não encontrada no ambiente.');
       return '';
     }
     
@@ -152,27 +152,24 @@ export default function App() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [{
-          role: "user",
-          parts: [
-            {
-              text: "Transcreva este áudio de oficina mecânica. Retorne apenas o texto transcrito, de forma clara e profissional em português. Se não houver fala clara, retorne apenas o que puder entender ou nada se for apenas ruído."
-            },
-            {
-              inlineData: {
-                mimeType: "audio/webm",
-                data: base64Data
-              }
+        contents: [
+          {
+            text: "Você é um especialista em transcrição de áudio para oficinas mecânicas. Transcreva o áudio de forma clara, técnica e profissional em português. Retorne apenas o texto transcrito. Se houver apenas ruído ou silêncio, retorne uma string vazia."
+          },
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Data
             }
-          ]
-        }]
+          }
+        ]
       });
       
-      const text = response.text || '';
+      const text = response.text?.trim() || '';
       console.log('Transcrição concluída:', text);
       return text;
     } catch (error) {
-      console.error('Error transcribing audio:', error);
+      console.error('Erro na transcrição via Gemini:', error);
       return '';
     }
   };
@@ -434,51 +431,63 @@ export default function App() {
   const startRecording = async (pieceId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
+      
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+        ? 'audio/webm' 
+        : MediaRecorder.isTypeSupported('audio/mp4') 
+          ? 'audio/mp4' 
+          : 'audio/aac';
+          
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data);
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
         reader.onloadend = async () => {
-          const base64Audio = reader.result as string;
-          
-          if (pieceId === 'observations') {
-            setIsTranscribing('observations');
-            const transcription = await transcribeAudio(base64Audio);
-            if (transcription) {
-              setCurrentNote(prev => ({
-                ...prev,
-                observations: prev.observations + (prev.observations ? ' ' : '') + transcription
-              }));
+          try {
+            const base64Audio = reader.result as string;
+            
+            if (pieceId === 'observations') {
+              setIsTranscribing('observations');
+              const transcription = await transcribeAudio(base64Audio, mimeType);
+              if (transcription) {
+                setCurrentNote(prev => ({
+                  ...prev,
+                  observations: prev.observations + (prev.observations ? ' ' : '') + transcription
+                }));
+              }
+            } else {
+              updatePiece(pieceId, { audioBlob: base64Audio });
+              setIsTranscribing(pieceId);
+              const transcription = await transcribeAudio(base64Audio, mimeType);
+              if (transcription) {
+                setCurrentNote(prev => ({
+                  ...prev,
+                  pieces: prev.pieces.map(p => {
+                    if (p.id === pieceId) {
+                      const currentDesc = p.description || '';
+                      return {
+                        ...p,
+                        description: currentDesc + (currentDesc ? ' ' : '') + transcription
+                      };
+                    }
+                    return p;
+                  })
+                }));
+              }
             }
-            setIsTranscribing(null);
-          } else {
-            updatePiece(pieceId, { audioBlob: base64Audio });
-            // Optionally transcribe for pieces too if the user wants
-            setIsTranscribing(pieceId);
-            const transcription = await transcribeAudio(base64Audio);
-            if (transcription) {
-              setCurrentNote(prev => ({
-                ...prev,
-                pieces: prev.pieces.map(p => {
-                  if (p.id === pieceId) {
-                    const currentDesc = p.description || '';
-                    return {
-                      ...p,
-                      description: currentDesc + (currentDesc ? ' ' : '') + transcription
-                    };
-                  }
-                  return p;
-                })
-              }));
-            }
+          } catch (error) {
+            console.error('Erro ao processar áudio gravado:', error);
+          } finally {
             setIsTranscribing(null);
           }
         };
@@ -488,7 +497,7 @@ export default function App() {
       setIsRecording(pieceId);
     } catch (err) {
       console.error('Error recording audio:', err);
-      alert('Permissão de microfone negada ou não suportada.');
+      alert('Não foi possível acessar o microfone ou formato de áudio não suportado.');
     }
   };
 
