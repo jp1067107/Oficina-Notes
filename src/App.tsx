@@ -334,12 +334,20 @@ export default function App() {
   };
 
   const handleDeleteNote = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm('Tem certeza que deseja excluir esta nota?')) {
+    if (e) e.stopPropagation();
+    
+    if (!id) {
+      alert('Erro: ID da nota não encontrado.');
+      return;
+    }
+
+    if (window.confirm('Tem certeza que deseja excluir esta nota?')) {
       const path = `notes/${id}`;
       try {
         await deleteDoc(doc(db, 'notes', id));
+        if (view === 'details') setView('list');
       } catch (error) {
+        console.error('Erro ao excluir nota:', error);
         handleFirestoreError(error, OperationType.DELETE, path);
       }
     }
@@ -745,7 +753,7 @@ export default function App() {
                 >
                   {note.isDraft && (
                     <motion.div 
-                      className="absolute inset-0 border-2 border-amber-500/20 rounded-xl"
+                      className="absolute inset-0 border-2 border-amber-500/20 rounded-xl pointer-events-none"
                       animate={{ opacity: [0.2, 0.5, 0.2] }}
                       transition={{ duration: 2, repeat: Infinity }}
                     />
@@ -769,10 +777,11 @@ export default function App() {
                         {format(new Date(note.updatedAt), 'dd/MM/yy')}
                       </span>
                       <button 
+                        type="button"
                         onClick={(e) => handleDeleteNote(note.id, e)}
-                        className="text-zinc-700 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="text-zinc-600 hover:text-red-500 p-2 transition-colors relative z-30"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={18} className="pointer-events-none" />
                       </button>
                     </div>
                   </div>
@@ -790,15 +799,27 @@ export default function App() {
               </button>
               <h2 className="text-xl font-black italic tracking-tighter uppercase">Detalhes da Nota</h2>
             </div>
-            <button 
-              onClick={() => {
-                setStep(1);
-                setView('editor');
-              }}
-              className="p-3 bg-zinc-800 text-brand rounded hover:bg-zinc-700 transition-colors"
-            >
-              <Edit2 size={20} strokeWidth={3} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                type="button"
+                onClick={(e) => handleDeleteNote(currentNote.id, e)}
+                className="p-3 text-zinc-500 hover:text-red-500 transition-colors relative z-30"
+                title="Excluir"
+              >
+                <Trash2 size={20} className="pointer-events-none" />
+              </button>
+              <button 
+                type="button"
+                onClick={() => {
+                  setStep(1);
+                  setView('editor');
+                }}
+                className="p-3 bg-zinc-800 text-brand rounded hover:bg-zinc-700 transition-colors"
+                title="Editar"
+              >
+                <Edit2 size={20} strokeWidth={3} />
+              </button>
+            </div>
           </header>
 
           <div className="space-y-4">
