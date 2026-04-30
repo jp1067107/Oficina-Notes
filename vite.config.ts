@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => {
   return {
     build: {
       outDir: 'dist',
-      emptyOutDir: true,
+      emptyOutDir: false,
       sourcemap: false,
     },
     plugins: [
