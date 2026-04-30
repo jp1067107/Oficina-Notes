@@ -109,7 +109,7 @@ const initialNote = (userId: string = ''): NoteData => ({
   cpfCnpj: '',
   whatsapp: '',
   status: 'em_espera',
-  deliveryDate: new Date().toISOString().split('T')[0],
+  arrivalDate: new Date().toISOString().split('T')[0],
   pieces: CAR_PIECES.map(p => ({ ...p, selected: false, description: '' })),
   includePartsValue: false,
   partsValue: 0,
@@ -147,6 +147,7 @@ export default function App() {
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isIframe, setIsIframe] = useState(false);
+  const [activeTab, setActiveTab] = useState<ServiceStatus | 'all'>('em_espera');
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
@@ -312,15 +313,33 @@ export default function App() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const fetchedNotes = snapshot.docs.map(doc => {
-        const data = doc.data() as NoteData;
+        const data = doc.data();
         return {
           ...data,
+          id: doc.id,
+          userId: data.userId || user.uid,
+          customerName: data.customerName || '',
+          vehicleNameColor: data.vehicleNameColor || '',
+          plate: data.plate || '',
+          cpfCnpj: data.cpfCnpj || '',
+          whatsapp: data.whatsapp || '',
           materialItems: data.materialItems || [],
           pieces: data.pieces || [],
           status: data.status || 'em_espera',
-          deliveryDate: data.deliveryDate || '',
-          onlyTotalValue: data.onlyTotalValue || false
-        };
+          arrivalDate: data.arrivalDate || data.deliveryDate || '',
+          includePartsValue: data.includePartsValue ?? false,
+          partsValue: data.partsValue ?? 0,
+          includeLaborValue: data.includeLaborValue ?? false,
+          laborValue: data.laborValue ?? 0,
+          includeMaterialsValue: data.includeMaterialsValue ?? false,
+          materialsValue: data.materialsValue ?? 0,
+          onlyTotalValue: data.onlyTotalValue ?? false,
+          totalValue: data.totalValue ?? 0,
+          observations: data.observations || '',
+          isDraft: data.isDraft ?? false,
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
+        } as NoteData;
       });
       setNotes(fetchedNotes);
     }, (error) => {
@@ -394,6 +413,23 @@ export default function App() {
   };
 
   // Audio Recording
+  const handleAdjustStatus = async (note: NoteData, direction: number) => {
+    const statuses: ServiceStatus[] = ['em_espera', 'na_oficina', 'finalizado'];
+    const currentIndex = statuses.indexOf(note.status);
+    const nextIndex = currentIndex + direction;
+    
+    if (nextIndex >= 0 && nextIndex < statuses.length) {
+      const newStatus = statuses[nextIndex];
+      const updatedNote = { ...note, status: newStatus, updatedAt: new Date().toISOString() };
+      
+      try {
+        await setDoc(doc(db, 'notes', note.id), updatedNote);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `notes/${note.id}`);
+      }
+    }
+  };
+
   const startRecording = async (pieceId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -478,10 +514,12 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredNotes = notes
-    .filter(n => 
-      n.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      n.plate.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    .filter(n => {
+      const matchesSearch = n.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           n.plate.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTab = activeTab === 'all' || n.status === activeTab;
+      return matchesSearch && matchesTab;
+    })
     .sort((a, b) => {
       if (a.isDraft && !b.isDraft) return -1;
       if (!a.isDraft && b.isDraft) return 1;
@@ -598,17 +636,12 @@ export default function App() {
     y += 10;
     
     doc.setFillColor(245, 245, 245);
-    doc.rect(margin, y, 170, 25, 'F');
-    y += 8;
+    doc.rect(margin, y, 170, 15, 'F');
+    y += 10;
     doc.setFont('helvetica', 'bold');
     doc.text(`VEÍCULO: ${currentNote.vehicleNameColor || '---'}`, margin + 5, y);
     doc.text(`PLACA: ${currentNote.plate || '---'}`, 120, y);
-    y += 7;
-    doc.text(`STATUS: ${SERVICE_STATUS_LABELS[currentNote.status]}`, margin + 5, y);
-    if (currentNote.deliveryDate) {
-      doc.text(`ENTREGA: ${format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}`, 120, y);
-    }
-    y += 15;
+    y += 10;
 
     // Services Section
     const selectedPieces = currentNote.pieces.filter(p => p.selected);
@@ -856,6 +889,37 @@ export default function App() {
             </label>
           </div>
 
+          <div className="flex bg-zinc-900 border border-zinc-800 p-1 rounded-xl overflow-hidden shadow-inner">
+            {(['all', 'em_espera', 'na_oficina', 'finalizado'] as (ServiceStatus | 'all')[]).map((status) => {
+              const count = status === 'all' ? notes.length : notes.filter(n => n.status === status).length;
+              const isActive = activeTab === status;
+              return (
+                <button
+                  key={status}
+                  onClick={() => setActiveTab(status)}
+                  className={`flex-1 flex flex-col items-center py-2.5 rounded-lg transition-all relative ${
+                    isActive 
+                      ? 'bg-zinc-800 text-brand shadow-[0_0_15px_rgba(34,197,94,0.1)]' 
+                      : 'text-zinc-600 hover:text-zinc-400'
+                  }`}
+                >
+                  <span className={`text-[9px] font-black uppercase tracking-tighter mb-0.5 ${isActive ? 'text-brand' : 'text-zinc-500'}`}>
+                    {status === 'all' ? 'Todos' : SERVICE_STATUS_LABELS[status]}
+                  </span>
+                  <span className={`text-base font-black font-mono leading-none ${isActive ? 'text-white' : 'text-zinc-700'}`}>
+                    {count.toString().padStart(2, '0')}
+                  </span>
+                  {isActive && (
+                    <motion.div 
+                      layoutId="activeTabIndicator" 
+                      className="absolute -bottom-1 w-1 h-1 bg-brand rounded-full shadow-[0_0_5px_#22c55e]" 
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
           <div className="space-y-4">
             {filteredNotes.length === 0 ? (
               <div className="text-center py-20 text-zinc-600">
@@ -888,7 +952,38 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">{note.customerName || 'Cliente não identificado'}</p>
-                        <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold mt-1`}>R$ {note.totalValue?.toFixed(2)}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold whitespace-nowrap`}>R$ {note.totalValue?.toFixed(2)}</p>
+                          <div className="h-4 w-[1px] bg-zinc-800"></div>
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAdjustStatus(note, -1);
+                              }}
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
+                              disabled={note.status === 'em_espera'}
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
+                              note.status === 'finalizado' ? 'bg-green-500 text-black' :
+                              note.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                            }`}>
+                              {SERVICE_STATUS_LABELS[note.status]}
+                            </span>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAdjustStatus(note, 1);
+                              }}
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
+                              disabled={note.status === 'finalizado'}
+                            >
+                              <ChevronRight size={16} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-2">
@@ -970,10 +1065,10 @@ export default function App() {
                 </div>
                 <p className="text-xl font-bold uppercase opacity-80">{currentNote.vehicleNameColor || 'NÃO INFORMADO'}</p>
                 <p className="text-3xl font-black font-mono tracking-widest text-white mt-1">{currentNote.plate || '---'}</p>
-                {currentNote.deliveryDate && (
+                {currentNote.arrivalDate && (
                   <div className="flex items-center gap-2 mt-3 text-zinc-500 text-[10px] uppercase font-bold">
                     <Calendar size={12} className="text-brand" />
-                    <span>Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
+                    <span>Chegada: {format(new Date(currentNote.arrivalDate + 'T12:00:00'), 'dd/MM/yyyy')}</span>
                   </div>
                 )}
               </div>
@@ -1191,11 +1286,11 @@ export default function App() {
                         />
                       </div>
                       <div>
-                        <label className="label-tech">Data de Entrega</label>
+                        <label className="label-tech">Data de Chegada</label>
                         <input 
                           type="date" 
-                          value={currentNote.deliveryDate}
-                          onChange={e => setCurrentNote({ ...currentNote, deliveryDate: e.target.value })}
+                          value={currentNote.arrivalDate}
+                          onChange={e => setCurrentNote({ ...currentNote, arrivalDate: e.target.value })}
                           className="input-field text-xs" 
                         />
                       </div>
@@ -1622,11 +1717,21 @@ export default function App() {
                       </h2>
                       <p className="font-bold opacity-80 uppercase">{currentNote.vehicleNameColor}</p>
                       <p className="font-black text-2xl font-mono text-white tracking-widest mt-1">{currentNote.plate}</p>
-                      {currentNote.deliveryDate && (
+                      {currentNote.arrivalDate && (
                         <p className="text-[10px] text-zinc-500 mt-2 uppercase font-bold flex items-center gap-1">
-                          <Calendar size={10} /> Entrega: {format(new Date(currentNote.deliveryDate + 'T12:00:00'), 'dd/MM/yyyy')}
+                          <Calendar size={10} /> Chegada: {format(new Date(currentNote.arrivalDate + 'T12:00:00'), 'dd/MM/yyyy')}
                         </p>
                       )}
+                      
+                      <div className="mt-4 pt-4 border-t border-zinc-800">
+                        <label className="label-tech mb-2 block">Alterar Data de Chegada</label>
+                        <input 
+                          type="date" 
+                          value={currentNote.arrivalDate}
+                          onChange={e => setCurrentNote({ ...currentNote, arrivalDate: e.target.value })}
+                          className="input-field text-xs bg-black/40" 
+                        />
+                      </div>
                     </div>
                     <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
                       currentNote.status === 'finalizado' ? 'bg-green-500 text-black' :

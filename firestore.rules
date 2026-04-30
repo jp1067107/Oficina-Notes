@@ -45,7 +45,8 @@ service cloud.firestore {
 
     function isValidNote(data) {
       let requiredKeys = ['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'createdAt', 'updatedAt'];
-      let allKeys = requiredKeys.concat(['deliveryDate']);
+      let optionalKeys = ['arrivalDate', 'deliveryDate'];
+      let allKeys = requiredKeys.concat(optionalKeys);
       
       return data.keys().hasAll(requiredKeys) &&
              data.keys().size() <= allKeys.size() &&
@@ -57,6 +58,7 @@ service cloud.firestore {
              data.cpfCnpj is string && data.cpfCnpj.size() <= 30 &&
              data.whatsapp is string && data.whatsapp.size() <= 30 &&
              data.status in ['em_espera', 'na_oficina', 'finalizado'] &&
+             (data.get('arrivalDate', '') is string && data.get('arrivalDate', '').size() <= 20) &&
              (data.get('deliveryDate', '') is string && data.get('deliveryDate', '').size() <= 20) &&
              data.pieces is list && data.pieces.size() <= 50 &&
              (data.pieces.size() == 0 || isValidServicePiece(data.pieces[0])) &&
@@ -90,7 +92,7 @@ service cloud.firestore {
                       incoming().userId == existing().userId &&
                       incoming().id == existing().id &&
                       incoming().createdAt == existing().createdAt &&
-                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'deliveryDate', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'updatedAt']);
+                      incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'arrivalDate', 'deliveryDate', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'updatedAt']);
                       
       allow delete: if isOwner(existing().userId);
     }
