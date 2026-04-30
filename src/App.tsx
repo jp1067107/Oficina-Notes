@@ -148,6 +148,17 @@ export default function App() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isIframe, setIsIframe] = useState(false);
   const [activeTab, setActiveTab] = useState<ServiceStatus | 'all'>('em_espera');
+  const [statusSelectorId, setStatusSelectorId] = useState<string | null>(null);
+
+  const handleUpdateStatus = async (note: NoteData, newStatus: ServiceStatus) => {
+    const updatedNote = { ...note, status: newStatus, updatedAt: new Date().toISOString() };
+    try {
+      await setDoc(doc(db, 'notes', note.id), updatedNote);
+      setStatusSelectorId(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `notes/${note.id}`);
+    }
+  };
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
@@ -413,10 +424,14 @@ export default function App() {
   };
 
   // Audio Recording
-  const handleAdjustStatus = async (note: NoteData, direction: number) => {
+  const handleAdjustStatus = async (note: NoteData, direction: number, cycle: boolean = false) => {
     const statuses: ServiceStatus[] = ['em_espera', 'na_oficina', 'finalizado'];
     const currentIndex = statuses.indexOf(note.status);
-    const nextIndex = currentIndex + direction;
+    let nextIndex = currentIndex + direction;
+    
+    if (cycle) {
+      nextIndex = (currentIndex + direction + statuses.length) % statuses.length;
+    }
     
     if (nextIndex >= 0 && nextIndex < statuses.length) {
       const newStatus = statuses[nextIndex];
@@ -952,36 +967,56 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">{note.customerName || 'Cliente não identificado'}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-1 mt-1">
                           <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold whitespace-nowrap`}>R$ {note.totalValue?.toFixed(2)}</p>
-                          <div className="h-4 w-[1px] bg-zinc-800"></div>
-                          <div className="flex items-center gap-1">
-                            <button 
+                          <div className="h-4 w-[1px] bg-zinc-800 mx-1"></div>
+                          <div className="relative">
+                            <span 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleAdjustStatus(note, -1);
+                                setStatusSelectorId(statusSelectorId === note.id ? null : note.id);
                               }}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
-                              disabled={note.status === 'em_espera'}
+                              className={`text-[8px] font-black uppercase px-2 py-0.5 rounded cursor-pointer transition-all hover:brightness-110 active:scale-95 flex items-center gap-1 ${
+                                note.status === 'finalizado' ? 'bg-green-500 text-black' :
+                                note.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
+                              }`}
                             >
-                              <ChevronLeft size={16} />
-                            </button>
-                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
-                              note.status === 'finalizado' ? 'bg-green-500 text-black' :
-                              note.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
-                            }`}>
                               {SERVICE_STATUS_LABELS[note.status]}
                             </span>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAdjustStatus(note, 1);
-                              }}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
-                              disabled={note.status === 'finalizado'}
-                            >
-                              <ChevronRight size={16} />
-                            </button>
+
+                            <AnimatePresence>
+                              {statusSelectorId === note.id && (
+                                <>
+                                  <div 
+                                    className="fixed inset-0 z-40" 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setStatusSelectorId(null);
+                                    }}
+                                  />
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                                    className="absolute left-0 bottom-full mb-2 z-50 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1 min-w-[120px] overflow-hidden"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {(['em_espera', 'na_oficina', 'finalizado'] as ServiceStatus[]).map((s) => (
+                                      <button
+                                        key={s}
+                                        onClick={() => handleUpdateStatus(note, s)}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-between ${
+                                          note.status === s ? 'bg-zinc-800 text-brand' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                                        }`}
+                                      >
+                                        {SERVICE_STATUS_LABELS[s]}
+                                        {note.status === s && <Check size={10} />}
+                                      </button>
+                                    ))}
+                                  </motion.div>
+                                </>
+                              )}
+                            </AnimatePresence>
                           </div>
                         </div>
                       </div>
