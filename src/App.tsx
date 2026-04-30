@@ -181,13 +181,25 @@ export default function App() {
     }
   };
 
+  const calculateTotal = (note: NoteData) => {
+    if (note.onlyTotalValue) return Number(note.totalValue) || 0;
+    
+    let total = 0;
+    if (note.includePartsValue) total += Number(note.partsValue) || 0;
+    if (note.includeLaborValue) total += Number(note.laborValue) || 0;
+    
+    if (note.includeMaterialsValue) {
+      const itemsSum = (note.materialItems || []).reduce((acc, item) => acc + (Number(item.price) || 0), 0);
+      total += itemsSum > 0 ? itemsSum : (Number(note.materialsValue) || 0);
+    }
+    
+    return total;
+  };
+
   const saveDraft = useCallback(async (note: NoteData) => {
     if (!user) return;
     const now = new Date().toISOString();
-    let total = 0;
-    if (note.includePartsValue) total += Number(note.partsValue);
-    if (note.includeLaborValue) total += Number(note.laborValue);
-    if (note.includeMaterialsValue) total += Number(note.materialsValue);
+    const total = calculateTotal(note);
 
     const noteToSave: NoteData = { 
       ...note, 
@@ -200,7 +212,7 @@ export default function App() {
     try {
       await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
     } catch (error) {
-      console.error('Draft save failed', error);
+      handleFirestoreError(error, OperationType.WRITE, `notes/${noteToSave.id}`);
     }
   }, [user]);
 
@@ -210,7 +222,7 @@ export default function App() {
 
     const timer = setTimeout(() => {
       saveDraft(currentNote);
-    }, 2000);
+    }, 1500); // Faster auto-save
 
     return () => clearTimeout(timer);
   }, [currentNote, user, view, saveDraft]);
@@ -365,12 +377,7 @@ export default function App() {
   const saveCurrentNote = async () => {
     if (!user) return;
     const now = new Date().toISOString();
-    
-    // Calculate total
-    let total = 0;
-    if (currentNote.includePartsValue) total += Number(currentNote.partsValue);
-    if (currentNote.includeLaborValue) total += Number(currentNote.laborValue);
-    if (currentNote.includeMaterialsValue) total += Number(currentNote.materialsValue);
+    const total = calculateTotal(currentNote);
     
     const noteToSave: NoteData = { 
       ...currentNote, 
@@ -558,22 +565,6 @@ export default function App() {
       ...prev,
       pieces: prev.pieces.map(p => p.id === id ? { ...p, ...updates } : p)
     }));
-  };
-
-  const calculateTotal = (note: NoteData) => {
-    if (note.onlyTotalValue) return note.totalValue;
-    
-    let total = 0;
-    if (note.includePartsValue) total += Number(note.partsValue);
-    if (note.includeLaborValue) total += Number(note.laborValue);
-    
-    // Sum material items if included
-    if (note.includeMaterialsValue) {
-      const itemsSum = (note.materialItems || []).reduce((acc, item) => acc + (item.price || 0), 0);
-      total += itemsSum > 0 ? itemsSum : Number(note.materialsValue);
-    }
-    
-    return total;
   };
 
   const generatePDF = () => {

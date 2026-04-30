@@ -44,9 +44,11 @@ service cloud.firestore {
     }
 
     function isValidNote(data) {
-      return data.keys().hasAll(['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'createdAt', 'updatedAt']) &&
-             data.keys().hasAny(['deliveryDate']) &&
-             data.keys().size() == 23 &&
+      let requiredKeys = ['id', 'userId', 'customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'createdAt', 'updatedAt'];
+      let allKeys = requiredKeys.concat(['deliveryDate']);
+      
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().size() <= allKeys.size() &&
              data.id is string && data.id.size() <= 128 &&
              data.userId == request.auth.uid &&
              data.customerName is string && data.customerName.size() <= 200 &&
@@ -55,7 +57,7 @@ service cloud.firestore {
              data.cpfCnpj is string && data.cpfCnpj.size() <= 30 &&
              data.whatsapp is string && data.whatsapp.size() <= 30 &&
              data.status in ['em_espera', 'na_oficina', 'finalizado'] &&
-             (data.deliveryDate is string && data.deliveryDate.size() <= 20) &&
+             (data.get('deliveryDate', '') is string && data.get('deliveryDate', '').size() <= 20) &&
              data.pieces is list && data.pieces.size() <= 50 &&
              (data.pieces.size() == 0 || isValidServicePiece(data.pieces[0])) &&
              data.includePartsValue is bool &&
