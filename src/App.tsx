@@ -33,6 +33,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
+import PWAPrompt from './components/PWAPrompt';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -1884,6 +1885,7 @@ export default function App() {
           </footer>
         </div>
       )}
+      <PWAPrompt />
     </div>
   );
 }
