@@ -33,7 +33,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
-import PWAPrompt from './components/PWAPrompt';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -148,17 +147,6 @@ export default function App() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isIframe, setIsIframe] = useState(false);
   const [activeTab, setActiveTab] = useState<ServiceStatus | 'all'>('em_espera');
-  const [statusSelectorId, setStatusSelectorId] = useState<string | null>(null);
-
-  const handleUpdateStatus = async (note: NoteData, newStatus: ServiceStatus) => {
-    const updatedNote = { ...note, status: newStatus, updatedAt: new Date().toISOString() };
-    try {
-      await setDoc(doc(db, 'notes', note.id), updatedNote);
-      setStatusSelectorId(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `notes/${note.id}`);
-    }
-  };
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
@@ -635,74 +623,97 @@ export default function App() {
     y = 55;
     doc.setTextColor(0, 0, 0);
     
-    // Customer and Vehicle Section
+    // Customer and Vehicle Section Grouped
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('DADOS DO CLIENTE E VEÍCULO', margin, y);
     doc.line(margin, y + 2, 190, y + 2);
     y += 10;
     
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`NOME: ${currentNote.customerName || '---'}`, margin, y);
-    doc.text(`WHATSAPP: ${currentNote.whatsapp || '---'}`, 120, y);
-    y += 7;
-    doc.text(`CPF/CNPJ: ${currentNote.cpfCnpj || '---'}`, margin, y);
-    y += 10;
-    
-    doc.setFillColor(245, 245, 245);
-    doc.rect(margin, y, 170, 15, 'F');
-    y += 10;
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`VEÍCULO: ${currentNote.vehicleNameColor || '---'}`, margin + 5, y);
-    doc.text(`PLACA: ${currentNote.plate || '---'}`, 120, y);
-    y += 10;
+    doc.text('CLIENTE:', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(currentNote.customerName || '---', margin + 20, y);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('WHATSAPP:', 110, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(currentNote.whatsapp || '---', 135, y);
+    
+    y += 7;
+    doc.setFont('helvetica', 'bold');
+    doc.text('VEÍCULO:', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(currentNote.vehicleNameColor || '---', margin + 20, y);
+    
+    doc.setFont('helvetica', 'bold');
+    doc.text('PLACA:', 110, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(currentNote.plate || '---', 135, y);
+    
+    y += 7;
+    doc.setFont('helvetica', 'bold');
+    doc.text('CPF/CNPJ:', margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(currentNote.cpfCnpj || '---', margin + 20, y);
+    
+    y += 15;
 
     // Services Section
     const selectedPieces = currentNote.pieces.filter(p => p.selected);
     if (selectedPieces.length > 0) {
-      doc.setFontSize(12);
+      if (y > 230) { doc.addPage(); y = 20; }
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text('SERVIÇOS EXECUTADOS / NOTAS', margin, y);
-      doc.line(margin, y + 2, 190, y + 2);
-      y += 10;
+      doc.setFillColor(240, 240, 240);
+      doc.rect(margin, y, 170, 8, 'F');
+      doc.text('SERVIÇOS EXECUTADOS / NOTAS', margin + 5, y + 6);
+      y += 12;
       
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       selectedPieces.forEach(p => {
-        if (y > 270) { doc.addPage(); y = 20; }
+        if (y > 260) { doc.addPage(); y = 20; }
         doc.setFont('helvetica', 'bold');
         doc.text(`> ${p.label.toUpperCase()}`, margin, y);
-        y += 6;
+        y += 5;
         doc.setFont('helvetica', 'normal');
+        doc.setTextColor(60, 60, 60);
         const desc = doc.splitTextToSize(p.description || '(Sem descrição detalhada)', 160);
         doc.text(desc, margin + 5, y);
         y += desc.length * 5 + 5;
+        doc.setTextColor(0, 0, 0);
       });
+      y += 5;
     }
 
-    // Material Items Section
+    // Material Items Section - Optimized List
     if ((currentNote.materialItems?.length || 0) > 0 && !currentNote.onlyTotalValue) {
-      if (y > 240) { doc.addPage(); y = 20; }
-      y += 5;
-      doc.setFontSize(12);
+      if (y > 230) { doc.addPage(); y = 20; }
+      doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
-      doc.text('LISTAGEM DE PEÇAS E MATERIAIS', margin, y);
-      doc.line(margin, y + 2, 190, y + 2);
-      y += 10;
+      doc.setFillColor(240, 240, 240);
+      doc.rect(margin, y, 170, 8, 'F');
+      doc.text('LISTAGEM DE PEÇAS E MATERIAIS', margin + 5, y + 6);
+      y += 12;
       
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
-      doc.text('DESCRIÇÃO', margin, y);
+      doc.text('DESCRIÇÃO DO ITEM', margin + 5, y);
       doc.text('VALOR UNIT.', 190, y, { align: 'right' });
+      y += 5;
+      doc.line(margin, y, 190, y);
       y += 6;
-      doc.setFont('helvetica', 'normal');
       
+      doc.setFont('helvetica', 'normal');
       (currentNote.materialItems || []).forEach(item => {
-        if (y > 275) { doc.addPage(); y = 20; }
-        doc.text(`${item.name}`, margin, y);
+        if (y > 270) { doc.addPage(); y = 20; }
+        doc.text(`${item.name}`, margin + 5, y);
         doc.text(`R$ ${item.price.toFixed(2)}`, 190, y, { align: 'right' });
-        y += 5;
-        doc.line(margin, y - 1, 190, y - 1, 'S');
+        y += 6;
+        doc.setDrawColor(230, 230, 230);
+        doc.line(margin + 5, y - 1, 185, y - 1);
+        doc.setDrawColor(0, 0, 0);
         y += 2;
       });
       y += 5;
@@ -736,7 +747,7 @@ export default function App() {
     doc.setTextColor(0, 0, 0);
     if (currentNote.observations) {
       y += 25;
-      if (y > 270) { doc.addPage(); y = 20; }
+      if (y > 260) { doc.addPage(); y = 20; }
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('OBSERVAÇÕES ADICIONAIS', margin, y);
@@ -746,13 +757,6 @@ export default function App() {
       const obs = doc.splitTextToSize(currentNote.observations, 170);
       doc.text(obs, margin, y);
     }
-
-    // Footer signature
-    doc.setFontSize(8);
-    doc.text('Assinatura do Responsável', 50, 285);
-    doc.line(20, 283, 80, 283);
-    doc.text('Assinatura do Cliente', 140, 285);
-    doc.line(110, 283, 170, 283);
 
     doc.save(`os_${currentNote.plate || 'nota'}_${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
@@ -967,56 +971,42 @@ export default function App() {
                           )}
                         </div>
                         <p className="text-zinc-500 text-[10px] uppercase font-bold tracking-widest">{note.customerName || 'Cliente não identificado'}</p>
-                        <div className="flex items-center gap-1 mt-1">
+                        <div className="flex items-center gap-2 mt-1">
                           <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold whitespace-nowrap`}>R$ {note.totalValue?.toFixed(2)}</p>
-                          <div className="h-4 w-[1px] bg-zinc-800 mx-1"></div>
-                          <div className="relative">
+                          <div className="h-4 w-[1px] bg-zinc-800"></div>
+                          <div className="flex items-center gap-1">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAdjustStatus(note, -1);
+                              }}
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
+                              disabled={note.status === 'em_espera'}
+                            >
+                              <ChevronLeft size={16} />
+                            </button>
                             <span 
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setStatusSelectorId(statusSelectorId === note.id ? null : note.id);
+                                handleAdjustStatus(note, 1, true);
                               }}
-                              className={`text-[8px] font-black uppercase px-2 py-0.5 rounded cursor-pointer transition-all hover:brightness-110 active:scale-95 flex items-center gap-1 ${
+                              className={`text-[8px] font-black uppercase px-2 py-0.5 rounded cursor-pointer transition-transform active:scale-95 hover:brightness-110 ${
                                 note.status === 'finalizado' ? 'bg-green-500 text-black' :
                                 note.status === 'na_oficina' ? 'bg-blue-500 text-white' : 'bg-zinc-800 text-zinc-400'
                               }`}
                             >
                               {SERVICE_STATUS_LABELS[note.status]}
                             </span>
-
-                            <AnimatePresence>
-                              {statusSelectorId === note.id && (
-                                <>
-                                  <div 
-                                    className="fixed inset-0 z-40" 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setStatusSelectorId(null);
-                                    }}
-                                  />
-                                  <motion.div
-                                    initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                    className="absolute left-0 bottom-full mb-2 z-50 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-1 min-w-[120px] overflow-hidden"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    {(['em_espera', 'na_oficina', 'finalizado'] as ServiceStatus[]).map((s) => (
-                                      <button
-                                        key={s}
-                                        onClick={() => handleUpdateStatus(note, s)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-[10px] font-bold uppercase transition-colors flex items-center justify-between ${
-                                          note.status === s ? 'bg-zinc-800 text-brand' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
-                                        }`}
-                                      >
-                                        {SERVICE_STATUS_LABELS[s]}
-                                        {note.status === s && <Check size={10} />}
-                                      </button>
-                                    ))}
-                                  </motion.div>
-                                </>
-                              )}
-                            </AnimatePresence>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAdjustStatus(note, 1);
+                              }}
+                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
+                              disabled={note.status === 'finalizado'}
+                            >
+                              <ChevronRight size={16} />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1894,7 +1884,6 @@ export default function App() {
           </footer>
         </div>
       )}
-      <PWAPrompt />
     </div>
   );
 }
