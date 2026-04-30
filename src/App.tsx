@@ -33,6 +33,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
+import PWAPrompt from './components/PWAPrompt';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -242,16 +243,6 @@ export default function App() {
   // Environment Check
   useEffect(() => {
     setIsIframe(window.self !== window.top);
-    
-    // Force unregister any old service workers from previous PWA attempts to fix stale code
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then((registrations) => {
-        for (const registration of registrations) {
-          registration.unregister();
-          console.log('Old Service Worker unregistered to force update');
-        }
-      });
-    }
   }, []);
 
   // Test Connection
@@ -1763,6 +1754,7 @@ export default function App() {
           </footer>
         </div>
       )}
+      <PWAPrompt />
     </div>
   );
 }
