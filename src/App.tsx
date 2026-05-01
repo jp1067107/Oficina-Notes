@@ -34,7 +34,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
 import PWAPrompt from './components/PWAPrompt';
-import InstallPrompt from './components/InstallPrompt';
+import InstallButton from './components/InstallButton';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -877,6 +877,7 @@ export default function App() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
+              <InstallButton />
               <button 
                 onClick={handleCreateNote}
                 className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
@@ -1887,7 +1888,6 @@ export default function App() {
         </div>
       )}
       <PWAPrompt />
-      <InstallPrompt />
     </div>
   );
 }
