@@ -28,12 +28,13 @@ import {
   AudioLines,
   History,
   DollarSign,
-  PlusCircle
+  PlusCircle,
+  Smartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
-import InstallButton from './components/InstallButton';
+import { InstallView } from './components/InstallView';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -136,7 +137,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isVerifyingSubscription, setIsVerifyingSubscription] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
-  const [view, setView] = useState<'list' | 'editor' | 'details'>('list');
+  const [view, setView] = useState<'list' | 'editor' | 'details' | 'install'>('list');
   const [notes, setNotes] = useState<NoteData[]>([]);
   const [currentNote, setCurrentNote] = useState<NoteData>(initialNote());
   const [step, setStep] = useState(1);
@@ -876,6 +877,13 @@ export default function App() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => setView('install')}
+                className="bg-zinc-900 text-zinc-500 p-3 rounded hover:text-brand transition-colors relative"
+                title="Instalar App"
+              >
+                <Smartphone size={24} />
+              </button>
               <button 
                 onClick={handleCreateNote}
                 className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
@@ -891,8 +899,6 @@ export default function App() {
               </button>
             </div>
           </header>
-
-          <InstallButton />
 
           <div className="relative flex gap-2">
             <div className="relative flex-1">
@@ -1211,6 +1217,8 @@ export default function App() {
             </div>
           </div>
         </div>
+      ) : view === 'install' ? (
+        <InstallView onBack={() => setView('list')} />
       ) : (
         <div className="p-4 space-y-6">
           <header className="flex items-center gap-4 py-2">
