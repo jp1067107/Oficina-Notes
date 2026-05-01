@@ -33,7 +33,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
-import PWAPrompt from './components/PWAPrompt';
 import InstallButton from './components/InstallButton';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
@@ -1887,7 +1886,6 @@ export default function App() {
           </footer>
         </div>
       )}
-      <PWAPrompt />
     </div>
   );
 }

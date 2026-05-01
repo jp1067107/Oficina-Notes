@@ -12,8 +12,9 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
-        registerType: 'prompt',
-        includeAssets: ['icon.svg'],
+        registerType: 'autoUpdate',
+        injectRegister: 'script-defer',
+        includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         manifest: {
           name: 'Oficina Notes',
           short_name: 'Oficina',
@@ -21,6 +22,8 @@ export default defineConfig(({ mode }) => {
           theme_color: '#22c55e',
           background_color: '#000000',
           display: 'standalone',
+          orientation: 'portrait',
+          start_url: '.',
           icons: [
             {
               src: '/icon-192.png',
@@ -43,8 +46,10 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
+          globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
           cleanupOutdatedCaches: true,
-          clientsClaim: true
+          clientsClaim: true,
+          skipWaiting: true
         },
         devOptions: {
           enabled: false
