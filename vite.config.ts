@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'prompt',
-        includeAssets: ['icone-app.png'],
+        includeAssets: ['icon.svg'],
         manifest: {
           name: 'Oficina Notes',
           short_name: 'Oficina',
@@ -23,21 +23,21 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           icons: [
             {
-              src: '/icone-app.png',
+              src: '/icon.svg',
               sizes: '192x192',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any'
             },
             {
-              src: '/icone-app.png',
+              src: '/icon.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any'
             },
             {
-              src: '/icone-app.png',
+              src: '/icon.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'maskable'
             }
           ]
