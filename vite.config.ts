@@ -13,7 +13,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: 'script-defer',
+        injectRegister: null,
         includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         manifest: {
           name: 'OficinaNotes',
@@ -52,7 +52,9 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true
         },
         devOptions: {
-          enabled: false
+          enabled: true,
+          type: 'module',
+          navigateFallback: 'index.html'
         }
       })
     ],
