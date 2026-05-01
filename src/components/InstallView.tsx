@@ -15,6 +15,7 @@ export const InstallView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
+  const [showManualInstructions, setShowManualInstructions] = useState(false);
 
   useEffect(() => {
     const checkStandalone = () => {
@@ -62,7 +63,8 @@ export const InstallView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
 
     if (!deferredPrompt) {
-      alert('Para instalar o app, abra o menu do seu navegador e escolha "Adicionar à Tela de Início" ou "Instalar Aplicativo".');
+      // Instead of an alert window, let's open an instruction modal for manual installation
+      setShowManualInstructions(true);
       return;
     }
     
@@ -160,6 +162,42 @@ export const InstallView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </p>
               <button 
                 onClick={() => setShowIOSInstructions(false)}
+                className="w-full bg-brand text-black font-black uppercase tracking-widest py-4 rounded-xl transition-transform active:scale-95 text-lg"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showManualInstructions && (
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 p-4 pb-12 sm:pb-4 animate-in fade-in duration-200" onClick={() => setShowManualInstructions(false)}>
+          <div 
+            className="bg-zinc-900 border-2 border-brand rounded-2xl p-6 shadow-2xl max-w-sm w-full relative animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-brand/20 rounded-2xl flex items-center justify-center mb-4 text-brand">
+                <Smartphone className="w-10 h-10" />
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2 uppercase italic tracking-tighter">Instalação Manual</h3>
+              <p className="text-zinc-300 mb-6 flex flex-col gap-4 text-base font-medium mt-2 text-left w-full">
+                <span>O navegador não permitiu a instalação automática. Veja como fazer isso manualmente no Chrome do Android:</span>
+                <span className="flex items-center gap-3 bg-zinc-800 p-4 rounded-xl border border-zinc-700">
+                  <div className="flex flex-col">
+                    <strong>1. Menu do Navegador</strong>
+                    <span className="text-sm font-normal text-zinc-400">Toque nos três pontinhos no canto superior direito</span>
+                  </div>
+                </span>
+                <span className="flex items-center gap-3 bg-zinc-800 p-4 rounded-xl border border-zinc-700">
+                  <div className="flex flex-col">
+                    <strong>2. Adicionar à Tela Inicial</strong>
+                    <span className="text-sm font-normal text-zinc-400">Encontre a opção "Adicionar à Tela Inicial" ou "Instalar Aplicativo" na lista</span>
+                  </div>
+                </span>
+              </p>
+              <button 
+                onClick={() => setShowManualInstructions(false)}
                 className="w-full bg-brand text-black font-black uppercase tracking-widest py-4 rounded-xl transition-transform active:scale-95 text-lg"
               >
                 Entendi
