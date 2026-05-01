@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'prompt',
+        includeAssets: ['icone-app.png'],
         manifest: {
           name: 'Oficina Notes',
           short_name: 'Oficina',
