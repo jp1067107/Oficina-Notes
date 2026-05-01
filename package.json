@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "tsc && vite build",
-    "preview": "vite preview --port 3000 --host 0.0.0.0",
-    "lint": "tsc --noEmit"
+    "preview": "npm run build && wrangler dev",
+    "lint": "tsc --noEmit",
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@google/genai": "^1.50.1",
@@ -29,5 +30,9 @@
     "vite": "^6.2.3",
     "vite-plugin-pwa": "^1.2.0",
     "workbox-window": "^7.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.35.0",
+    "wrangler": "^4.87.0"
   }
 }
