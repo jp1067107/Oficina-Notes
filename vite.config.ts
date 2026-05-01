@@ -8,11 +8,6 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
-    build: {
-      outDir: 'dist',
-      emptyOutDir: false,
-      sourcemap: false,
-    },
     plugins: [
       react(),
       tailwindcss(),
@@ -27,9 +22,15 @@ export default defineConfig(({ mode }) => {
           display: 'standalone',
           icons: [
             {
-              src: '/icon.svg',
+              src: '/icone-app.png',
+              sizes: '192x192',
+              type: 'image/png',
+              purpose: 'any maskable'
+            },
+            {
+              src: '/icone-app.png',
               sizes: '512x512',
-              type: 'image/svg+xml',
+              type: 'image/png',
               purpose: 'any maskable'
             }
           ]
