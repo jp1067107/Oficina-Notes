@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
           background_color: '#000000',
           display: 'standalone',
           orientation: 'portrait',
-          start_url: '.',
+          start_url: '/',
+          categories: ['productivity', 'business', 'utilities'],
           icons: [
             {
               src: '/icon-192.png',
@@ -42,6 +43,20 @@ export default defineConfig(({ mode }) => {
               sizes: '512x512',
               type: 'image/png',
               purpose: 'maskable'
+            }
+          ],
+          screenshots: [
+            {
+              src: '/screenshot-desktop.png',
+              sizes: '1280x720',
+              type: 'image/png',
+              form_factor: 'wide'
+            },
+            {
+              src: '/screenshot-mobile.png',
+              sizes: '720x1280',
+              type: 'image/png',
+              form_factor: 'narrow'
             }
           ]
         },
