@@ -16,11 +16,11 @@ export default defineConfig(({ mode }) => {
         injectRegister: 'script-defer',
         includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         manifest: {
-          name: 'Oficina Notes',
+          name: 'OficinaNotes',
           short_name: 'Oficina',
           description: 'Gestor de Ordem de Serviço Automotiva',
           theme_color: '#22c55e',
-          background_color: '#000000',
+          background_color: '#F8FAFC',
           display: 'standalone',
           orientation: 'portrait',
           start_url: '.',

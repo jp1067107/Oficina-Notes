@@ -876,7 +876,6 @@ export default function App() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <InstallButton />
               <button 
                 onClick={handleCreateNote}
                 className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
@@ -892,6 +891,8 @@ export default function App() {
               </button>
             </div>
           </header>
+
+          <InstallButton />
 
           <div className="relative flex gap-2">
             <div className="relative flex-1">

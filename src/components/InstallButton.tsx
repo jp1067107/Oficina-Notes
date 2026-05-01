@@ -81,46 +81,49 @@ const InstallButton: React.FC = () => {
   }
 
   return (
-    <>
+    <div className="w-full mb-6 mt-2">
       <button
         onClick={handleInstallClick}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-md border border-blue-500/50"
+        className="w-full flex flex-col items-center justify-center gap-2 bg-brand text-black p-5 rounded-2xl font-black transition-transform active:scale-95 shadow-[0_6px_0_#16a34a] active:shadow-[0_0px_0_#16a34a] active:translate-y-[6px]"
       >
-        <Download className="w-5 h-5" />
-        <span className="hidden sm:inline">Instalar App</span>
+        <div className="flex items-center gap-3">
+          <Download className="w-8 h-8" strokeWidth={3} />
+          <span className="text-lg sm:text-xl uppercase tracking-wider">Instalar App no Celular 📲</span>
+        </div>
+        <span className="text-sm font-bold opacity-80 uppercase tracking-widest text-[#064e3b]">Rápido, Seguro e Ocupa Pouco Espaço</span>
       </button>
 
       {/* iOS Instructions Modal */}
       {showIOSInstructions && (
-        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 p-4 pb-12 sm:pb-4 animate-in fade-in duration-200" onClick={() => setShowIOSInstructions(false)}>
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/80 p-4 pb-12 sm:pb-4 animate-in fade-in duration-200" onClick={() => setShowIOSInstructions(false)}>
           <div 
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-2xl max-w-sm w-full relative animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+            className="bg-zinc-900 border-2 border-brand rounded-2xl p-6 shadow-2xl max-w-sm w-full relative animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}
           >
             <button 
               onClick={() => setShowIOSInstructions(false)}
               className="absolute top-4 right-4 text-zinc-400 hover:text-white transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-8 h-8" />
             </button>
             
             <div className="flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-blue-500/20 rounded-2xl flex items-center justify-center mb-4 text-blue-500">
-                <Download className="w-8 h-8" />
+              <div className="w-20 h-20 bg-brand/20 rounded-2xl flex items-center justify-center mb-4 text-brand">
+                <Download className="w-10 h-10" />
               </div>
-              <h3 className="text-xl font-bold text-white mb-2">Instalar no iOS</h3>
-              <p className="text-zinc-400 mb-6 flex flex-col gap-4 text-sm mt-2">
-                <span>Para instalar o Oficina Notes no seu iPhone ou iPad:</span>
-                <span className="flex items-center justify-center gap-2 bg-zinc-800/50 p-3 rounded-lg border border-zinc-700/50">
-                  1. Toque em Compartilhar <Share className="w-5 h-5 text-blue-400" />
+              <h3 className="text-2xl font-black text-white mb-2 uppercase italic tracking-tighter">Instalar no iPhone</h3>
+              <p className="text-zinc-300 mb-6 flex flex-col gap-4 text-base font-medium mt-2">
+                <span>Para instalar o Oficina Notes no seu iPhone ou iPad, siga os 2 passos:</span>
+                <span className="flex items-center justify-center gap-3 bg-zinc-800 p-4 rounded-xl border border-zinc-700">
+                  1. Toque em Compartilhar <Share className="w-7 h-7 text-brand" />
                 </span>
-                <span className="flex items-center justify-center gap-2 bg-zinc-800/50 p-3 rounded-lg border border-zinc-700/50">
-                  2. Toque em "Adicionar à Tela de Início" <PlusSquare className="w-5 h-5 text-blue-400" />
+                <span className="flex items-center justify-center gap-3 bg-zinc-800 p-4 rounded-xl border border-zinc-700">
+                  2. Em seguida, toque em "Adicionar à Tela de Início" <PlusSquare className="w-7 h-7 text-brand" />
                 </span>
               </p>
               <button 
                 onClick={() => setShowIOSInstructions(false)}
-                className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-medium py-3 rounded-xl transition-colors"
+                className="w-full bg-brand text-black font-black uppercase tracking-widest py-4 rounded-xl transition-transform active:scale-95 text-lg"
               >
                 Entendi
               </button>
@@ -128,7 +131,7 @@ const InstallButton: React.FC = () => {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 };
 
