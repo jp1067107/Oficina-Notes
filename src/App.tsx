@@ -878,12 +878,6 @@ export default function App() {
             <div className="flex items-center gap-4">
               <InstallButton />
               <button 
-                onClick={handleCreateNote}
-                className="bg-brand text-black p-3 rounded shadow-lg hover:rotate-90 transition-transform"
-              >
-                <Plus size={24} strokeWidth={3} />
-              </button>
-              <button 
                 onClick={() => signOut(auth)}
                 className="bg-zinc-900 text-zinc-500 p-3 rounded hover:text-red-500 transition-colors"
                 title="Sair"
@@ -1030,6 +1024,14 @@ export default function App() {
               ))
             )}
           </div>
+
+          <button 
+            onClick={handleCreateNote}
+            className="fixed bottom-8 right-6 bg-brand text-black w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] hover:scale-110 active:scale-95 transition-all z-40"
+            title="Adicionar Nova OS"
+          >
+            <Plus size={28} strokeWidth={3} />
+          </button>
         </div>
       ) : view === 'details' ? (
         <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">

@@ -1,4 +1,5 @@
-const fs = require('fs');
+import fs from 'fs';
+import sharp from 'sharp';
 
 const svgCode = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" fill="#222" rx="100"/>
@@ -8,5 +9,18 @@ const svgCode = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" w
   </svg>
 </svg>`;
 
-// We don't have canvas installed probably. But we can just use SVG as PNG by base64 encoding if needed or download an image.
-// Actually, sharp can do it easily, we can install it and uninstall.
+fs.writeFileSync('public/icon.svg', svgCode);
+
+async function generate() {
+  await sharp(Buffer.from(svgCode))
+    .resize(192, 192)
+    .toFile('public/icon-192.png');
+    
+  await sharp(Buffer.from(svgCode))
+    .resize(512, 512)
+    .toFile('public/icon-512.png');
+    
+  console.log("Icons generated successfully!");
+}
+
+generate().catch(console.error);

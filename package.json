@@ -29,5 +29,8 @@
     "vite": "^6.2.3",
     "vite-plugin-pwa": "^1.2.0",
     "workbox-window": "^7.4.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5"
   }
 }
