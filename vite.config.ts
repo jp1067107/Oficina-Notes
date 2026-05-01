@@ -13,17 +13,17 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: null,
+        injectRegister: 'script-defer',
         includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
         manifest: {
-          name: 'OficinaNotes',
+          name: 'Oficina Notes',
           short_name: 'Oficina',
           description: 'Gestor de Ordem de Serviço Automotiva',
           theme_color: '#22c55e',
-          background_color: '#F8FAFC',
+          background_color: '#000000',
           display: 'standalone',
           orientation: 'portrait',
-          start_url: '/',
+          start_url: '.',
           icons: [
             {
               src: '/icon-192.png',
@@ -52,9 +52,7 @@ export default defineConfig(({ mode }) => {
           skipWaiting: true
         },
         devOptions: {
-          enabled: true,
-          type: 'module',
-          navigateFallback: 'index.html'
+          enabled: false
         }
       })
     ],
