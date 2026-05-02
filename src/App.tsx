@@ -155,6 +155,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<ServiceStatus | 'all'>('em_espera');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [pieceSearchTerm, setPieceSearchTerm] = useState("");
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light';
   });
@@ -421,6 +422,7 @@ export default function App() {
     try {
       await setDoc(doc(db, 'notes', noteToSave.id), noteToSave);
       setView('list');
+      setPieceSearchTerm('');
       confetti({
         particleCount: 100,
         spread: 70,
@@ -1305,6 +1307,7 @@ export default function App() {
             <button onClick={() => {
               saveDraft(currentNote);
               setView('list');
+              setPieceSearchTerm('');
             }} className="p-2 hover:bg-zinc-800 rounded-full text-zinc-400">
               <ArrowLeft size={24} />
             </button>
@@ -1445,8 +1448,28 @@ export default function App() {
                 <h2 className="text-xs font-black text-brand uppercase mb-4 flex items-center gap-2">
                   <span className="w-1 h-3 bg-brand rounded-full"></span>CHECKLIST DE LATARIA
                 </h2>
+                
+                <div className="relative mb-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-700" size={16} />
+                  <input 
+                    type="text" 
+                    placeholder="Pesquisar peça..." 
+                    value={pieceSearchTerm}
+                    onChange={(e) => setPieceSearchTerm(e.target.value)}
+                    className="w-full bg-black/40 border border-zinc-900 rounded p-2 pl-9 text-sm text-white focus:outline-none focus:border-brand transition-colors placeholder:text-zinc-700"
+                  />
+                  {pieceSearchTerm && (
+                    <button 
+                      onClick={() => setPieceSearchTerm('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 gap-2">
-                  {currentNote.pieces.map(piece => (
+                  {currentNote.pieces.filter(piece => piece.label.toLowerCase().includes(pieceSearchTerm.toLowerCase())).map(piece => (
                     <div 
                       key={piece.id}
                       onClick={() => updatePiece(piece.id, { selected: !piece.selected })}
