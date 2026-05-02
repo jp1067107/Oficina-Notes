@@ -14,53 +14,8 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'script-defer',
-        manifestFilename: 'manifest.webmanifest',
-        includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png'],
-        manifest: {
-          name: 'Oficina Notes',
-          short_name: 'Oficina',
-          description: 'Gestor de Ordem de Serviço Automotiva',
-          theme_color: '#22c55e',
-          background_color: '#000000',
-          display: 'standalone',
-          orientation: 'portrait',
-          start_url: '/',
-          categories: ['productivity', 'business', 'utilities'],
-          icons: [
-            {
-              src: '/icon-192.png',
-              sizes: '192x192',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: '/icon-512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'any'
-            },
-            {
-              src: '/icon-512.png',
-              sizes: '512x512',
-              type: 'image/png',
-              purpose: 'maskable'
-            }
-          ],
-          screenshots: [
-            {
-              src: '/screenshot-desktop.png',
-              sizes: '1280x720',
-              type: 'image/png',
-              form_factor: 'wide'
-            },
-            {
-              src: '/screenshot-mobile.png',
-              sizes: '720x1280',
-              type: 'image/png',
-              form_factor: 'narrow'
-            }
-          ]
-        },
+        manifest: false,
+        includeAssets: ['icon.svg', 'icon-192.png', 'icon-512.png', 'manifest.webmanifest'],
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
           cleanupOutdatedCaches: true,
