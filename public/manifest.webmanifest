@@ -8,10 +8,10 @@
   "theme_color": "#22c55e",
   "icons": [
     {
-      "src": "/icon-192.png",
-      "sizes": "192x192",
+      "src": "https://ibb.co/b5WxRBgn",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-}
+    }
   ]
 }
