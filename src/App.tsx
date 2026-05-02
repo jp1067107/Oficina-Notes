@@ -28,12 +28,17 @@ import {
   AudioLines,
   History,
   DollarSign,
-  PlusCircle
+  PlusCircle,
+  Menu,
+  Calculator,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from './constants';
 import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from './types';
 import InstallButton from './components/InstallButton';
+import CalculatorModal from './components/CalculatorModal';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import confetti from 'canvas-confetti';
@@ -148,6 +153,21 @@ export default function App() {
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isIframe, setIsIframe] = useState(false);
   const [activeTab, setActiveTab] = useState<ServiceStatus | 'all'>('em_espera');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return localStorage.getItem('theme') === 'light';
+  });
+
+  useEffect(() => {
+    if (isLightMode) {
+      document.body.classList.add('light');
+      localStorage.setItem('theme', 'light');
+    } else {
+      document.body.classList.remove('light');
+      localStorage.setItem('theme', 'dark');
+    }
+  }, [isLightMode]);
 
   const transcribeAudio = async (base64Audio: string, mimeType: string = "audio/webm"): Promise<string> => {
     if (!process.env.GEMINI_API_KEY) {
@@ -879,15 +899,85 @@ export default function App() {
             </div>
             <div className="flex items-center gap-4">
               <InstallButton />
-              <button 
-                onClick={() => signOut(auth)}
-                className="bg-zinc-900 text-zinc-500 p-3 rounded hover:text-red-500 transition-colors"
-                title="Sair"
-              >
-                <LogOut size={24} />
-              </button>
+              
+              <div className="relative">
+                <button 
+                  onClick={() => setIsMenuOpen(!isMenuOpen)}
+                  className="bg-zinc-900 text-zinc-500 p-3 rounded hover:text-brand transition-colors"
+                  title="Menu"
+                >
+                  <Menu size={24} />
+                </button>
+
+                <AnimatePresence>
+                  {isMenuOpen && (
+                    <>
+                      {/* Overlay para fechar o menu ao clicar fora */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setIsMenuOpen(false)}
+                      />
+                      
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                        transition={{ duration: 0.2 }}
+                        className="absolute right-0 top-full mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50 overflow-hidden"
+                      >
+                        <div className="py-1">
+                          {user?.email && (
+                            <div className="px-4 py-3 border-b border-zinc-800 mb-1">
+                              <p className="text-xs text-zinc-500 font-medium mb-0.5">Conectado como</p>
+                              <p className="text-sm text-zinc-200 font-medium truncate" title={user.email}>
+                                {user.email}
+                              </p>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              setIsCalculatorOpen(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            <Calculator size={16} />
+                            <span>Calculadora</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              setIsLightMode(!isLightMode);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            {isLightMode ? <Moon size={16} /> : <Sun size={16} />}
+                            <span>{isLightMode ? 'Modo Escuro' : 'Modo Claro'}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              signOut(auth);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-400 hover:text-red-500 hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            <LogOut size={16} />
+                            <span>Sair</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           </header>
+
+          <AnimatePresence>
+            {isCalculatorOpen && (
+              <CalculatorModal onClose={() => setIsCalculatorOpen(false)} />
+            )}
+          </AnimatePresence>
 
           <div className="relative flex gap-2">
             <div className="relative flex-1">
