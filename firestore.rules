@@ -77,6 +77,19 @@ service cloud.firestore {
              data.createdAt is string && 
              data.updatedAt is string;
     }
+    
+    function isValidExport(data) {
+      let requiredKeys = ['id', 'userId', 'createdAt', 'fileName', 'notesCount', 'exportDataJson'];
+      
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().size() == requiredKeys.size() &&
+             data.id is string && data.id.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.createdAt is string && data.createdAt.size() <= 50 &&
+             data.fileName is string && data.fileName.size() <= 200 &&
+             data.notesCount is number &&
+             data.exportDataJson is string && data.exportDataJson.size() <= 1048576;
+    }
 
     match /notes/{noteId} {
       allow get: if isOwner(existing().userId);
@@ -93,6 +106,18 @@ service cloud.firestore {
                       incoming().id == existing().id &&
                       incoming().createdAt == existing().createdAt &&
                       incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'vehicleNameColor', 'plate', 'cpfCnpj', 'whatsapp', 'status', 'arrivalDate', 'deliveryDate', 'pieces', 'includePartsValue', 'partsValue', 'includeLaborValue', 'laborValue', 'includeMaterialsValue', 'materialsValue', 'onlyTotalValue', 'totalValue', 'materialItems', 'observations', 'isDraft', 'updatedAt']);
+                      
+      allow delete: if isOwner(existing().userId);
+    }
+
+    match /exports/{exportId} {
+      allow get: if isOwner(existing().userId);
+      allow list: if isSignedIn() && resource.data.userId == request.auth.uid;
+      
+      allow create: if isSignedIn() && 
+                      isValidId(exportId) && 
+                      isValidExport(incoming()) && 
+                      incoming().id == exportId;
                       
       allow delete: if isOwner(existing().userId);
     }

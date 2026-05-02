@@ -40,3 +40,12 @@ export interface NoteData {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ExportLog {
+  id: string;
+  userId: string;
+  createdAt: string;
+  fileName: string;
+  notesCount: number;
+  exportDataJson: string;
+}

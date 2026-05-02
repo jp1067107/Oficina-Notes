@@ -37,11 +37,18 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from "./constants";
-import { NoteData, ServicePiece, MaterialItem, ServiceStatus } from "./types";
+import {
+  NoteData,
+  ServicePiece,
+  MaterialItem,
+  ServiceStatus,
+  ExportLog,
+} from "./types";
 import InstallButton from "./components/InstallButton";
 import CalculatorModal from "./components/CalculatorModal";
 import { format } from "date-fns";
 import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import confetti from "canvas-confetti";
 import { auth, db, signInWithGoogle } from "./lib/firebase";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
@@ -56,6 +63,7 @@ import {
   getDoc,
   orderBy,
   getDocFromServer,
+  writeBatch,
 } from "firebase/firestore";
 
 enum OperationType {
@@ -172,6 +180,9 @@ export default function App() {
   const [readyUntilTime, setReadyUntilTime] = useState("");
   const [readyIncludeValue, setReadyIncludeValue] = useState(true);
   const [readyModalError, setReadyModalError] = useState<string | null>(null);
+  const [isExportsModalOpen, setIsExportsModalOpen] = useState(false);
+  const [isConfirmExportOpen, setIsConfirmExportOpen] = useState(false);
+  const [exportsList, setExportsList] = useState<ExportLog[]>([]);
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem("theme") === "light";
   });
@@ -415,6 +426,40 @@ export default function App() {
     return unsubscribe;
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setExportsList([]);
+      return;
+    }
+
+    const path = "exports";
+    const collectionRef = collection(db, path);
+    // order by createdAt desc
+    const q = query(
+      collectionRef,
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const fetchedExports = snapshot.docs.map((doc) => {
+          return {
+            ...doc.data(),
+            id: doc.id,
+          } as ExportLog;
+        });
+        setExportsList(fetchedExports);
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.GET, path);
+      },
+    );
+
+    return unsubscribe;
+  }, [user]);
+
   const handleCreateNote = () => {
     setCurrentNote(initialNote(user?.uid || ""));
     setStep(1);
@@ -452,6 +497,109 @@ export default function App() {
       handleFirestoreError(error, OperationType.DELETE, path);
     } finally {
       setNoteToDelete(null);
+    }
+  };
+
+  const handleDeleteExport = async (exportId: string) => {
+    if (!window.confirm("Deseja realmente excluir esta planilha exportada?")) {
+      return;
+    }
+    const path = `exports/${exportId}`;
+    try {
+      await deleteDoc(doc(db, "exports", exportId));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
+  const generateAndDownloadPdf = (fileName: string, notesJsonOrArray: any) => {
+    let rawData: NoteData[] = [];
+    if (typeof notesJsonOrArray === "string") {
+      try {
+        rawData = JSON.parse(notesJsonOrArray);
+      } catch (e) {
+        console.error("Invalid export JSON", e);
+        return;
+      }
+    } else {
+      rawData = notesJsonOrArray;
+    }
+
+    const doc = new jsPDF();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Relatório de Ordens de Serviço (Finalizadas)", 14, 20);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(
+      `Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
+      14,
+      28,
+    );
+
+    const tableBody = rawData.map((note) => {
+      const total = note.onlyTotalValue
+        ? note.totalValue
+        : note.partsValue + note.laborValue + note.materialsValue;
+      return [
+        note.customerName || "-",
+        note.vehicleNameColor || "-",
+        note.plate || "-",
+        `R$ ${total.toFixed(2)}`,
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 35,
+      head: [["Cliente", "Veículo", "Placa", "Total"]],
+      body: tableBody,
+      theme: "striped",
+      headStyles: { fillColor: [37, 211, 102] },
+    });
+
+    doc.save(fileName);
+  };
+
+  const handleExportFinished = async () => {
+    if (!user) return;
+    const finishedNotes = notes.filter((n) => n.status === "finalizado");
+    if (finishedNotes.length === 0) return;
+
+    const exportDataJson = JSON.stringify(finishedNotes);
+    const fileName = `export_finalizadas_${new Date().toISOString().split("T")[0]}.pdf`;
+
+    // Trigger download
+    generateAndDownloadPdf(fileName, finishedNotes);
+
+    // Save export log & delete notes in batch (or sequentially if batch full, max 500)
+    try {
+      const exportId = doc(collection(db, "exports")).id;
+      const exportPath = `exports/${exportId}`;
+      const exportData = {
+        id: exportId,
+        userId: user.uid,
+        createdAt: new Date().toISOString(),
+        fileName,
+        notesCount: finishedNotes.length,
+        exportDataJson,
+      };
+      await setDoc(doc(db, "exports", exportId), exportData);
+
+      // Delete exported notes using batch (chunked to 500)
+      for (let i = 0; i < finishedNotes.length; i += 500) {
+        const chunk = finishedNotes.slice(i, i + 500);
+        const batch = writeBatch(db);
+        chunk.forEach((note) => {
+          batch.delete(doc(db, "notes", note.id));
+        });
+        await batch.commit();
+      }
+    } catch (err) {
+      console.error(err);
+      handleFirestoreError(err, OperationType.WRITE, "exports/...");
+    } finally {
+      setIsConfirmExportOpen(false);
     }
   };
 
@@ -1128,6 +1276,16 @@ export default function App() {
                           <button
                             onClick={() => {
                               setIsMenuOpen(false);
+                              setIsExportsModalOpen(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            <Download size={16} />
+                            <span>Planilhas Exportadas</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
                               setIsLightMode(!isLightMode);
                             }}
                             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
@@ -1332,13 +1490,26 @@ export default function App() {
             )}
           </div>
 
-          <button
-            onClick={handleCreateNote}
-            className="fixed bottom-8 right-6 bg-brand text-black w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] hover:scale-110 active:scale-95 transition-all z-40"
-            title="Adicionar Nova OS"
-          >
-            <Plus size={28} strokeWidth={3} />
-          </button>
+          <div className="fixed bottom-8 right-6 z-40 flex items-center gap-4">
+            {activeTab === "finalizado" &&
+              notes.filter((n) => n.status === "finalizado").length > 0 && (
+                <button
+                  onClick={() => setIsConfirmExportOpen(true)}
+                  className="bg-blue-500 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.4)] hover:scale-110 active:scale-95 transition-all"
+                  title="Exportar e limpar finalizadas"
+                >
+                  <Download size={24} strokeWidth={2.5} />
+                </button>
+              )}
+
+            <button
+              onClick={handleCreateNote}
+              className="bg-brand text-black w-14 h-14 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(34,197,94,0.4)] hover:scale-110 active:scale-95 transition-all"
+              title="Adicionar Nova OS"
+            >
+              <Plus size={28} strokeWidth={3} />
+            </button>
+          </div>
         </div>
       ) : view === "details" ? (
         <div className="p-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -2565,8 +2736,124 @@ export default function App() {
       )}
 
       <AnimatePresence>
+        {isExportsModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Download size={20} className="text-brand" />
+                  Histórico de Exportações
+                </h3>
+                <button
+                  onClick={() => setIsExportsModalOpen(false)}
+                  className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {exportsList.length === 0 ? (
+                  <div className="text-center py-8 text-zinc-500 text-sm font-medium">
+                    Nenhuma planilha exportada ainda.
+                  </div>
+                ) : (
+                  exportsList.map((exp) => (
+                    <div
+                      key={exp.id}
+                      className="bg-black/40 border border-zinc-800 rounded-xl p-4 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="text-white font-medium text-sm truncate max-w-[200px]">
+                          {exp.fileName}
+                        </p>
+                        <p className="text-xs text-zinc-500 font-medium">
+                          {format(
+                            new Date(exp.createdAt),
+                            "dd/MM/yyyy 'às' HH:mm",
+                          )}{" "}
+                          • {exp.notesCount} nota(s)
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() =>
+                            generateAndDownloadPdf(
+                              exp.fileName,
+                              exp.exportDataJson,
+                            )
+                          }
+                          className="p-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"
+                          title="Baixar novamente"
+                        >
+                          <Download size={18} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteExport(exp.id)}
+                          className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                          title="Excluir planilha"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {isCalculatorOpen && (
           <CalculatorModal onClose={() => setIsCalculatorOpen(false)} />
+        )}
+
+        {isConfirmExportOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6"
+            >
+              <h3 className="text-xl font-bold text-white mb-2">
+                Exportar planilhas?
+              </h3>
+              <p className="text-zinc-400 mb-6 text-sm">
+                Isso gerará um arquivo PDF e excluirá todas as notas finalizadas
+                permanentemente desta lista para limpar espaço. O arquivo de
+                exportação ficará salvo no histórico.
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setIsConfirmExportOpen(false)}
+                  className="px-4 py-2 rounded font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleExportFinished}
+                  className="px-4 py-2 rounded font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center gap-2"
+                >
+                  <Download size={16} /> Exportar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
 
         {noteToDelete && (
