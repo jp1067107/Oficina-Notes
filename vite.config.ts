@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
         registerType: 'autoUpdate',
         injectRegister: 'script-defer',
         manifest: false,
-        includeAssets: ['manifest.webmanifest', 'icon-192.png', 'icon-512.png'],
+        includeAssets: ['manifest.webmanifest'],
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
           cleanupOutdatedCaches: true,
