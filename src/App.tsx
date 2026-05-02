@@ -156,6 +156,7 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [pieceSearchTerm, setPieceSearchTerm] = useState("");
+  const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem('theme') === 'light';
   });
@@ -394,14 +395,19 @@ export default function App() {
       return;
     }
 
-    if (window.confirm('Tem certeza que deseja excluir esta nota?')) {
-      const path = `notes/${id}`;
-      try {
-        await deleteDoc(doc(db, 'notes', id));
-        if (view === 'details') setView('list');
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      }
+    setNoteToDelete(id);
+  };
+
+  const confirmDeleteNote = async () => {
+    if (!noteToDelete) return;
+    const path = `notes/${noteToDelete}`;
+    try {
+      await deleteDoc(doc(db, 'notes', noteToDelete));
+      if (view === 'details') setView('list');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    } finally {
+      setNoteToDelete(null);
     }
   };
 
@@ -978,6 +984,41 @@ export default function App() {
           <AnimatePresence>
             {isCalculatorOpen && (
               <CalculatorModal onClose={() => setIsCalculatorOpen(false)} />
+            )}
+            
+            {noteToDelete && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              >
+                <motion.div
+                  initial={{ scale: 0.95, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.95, y: 20 }}
+                  className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6"
+                >
+                  <h3 className="text-xl font-bold text-white mb-2">Excluir nota?</h3>
+                  <p className="text-zinc-400 mb-6">
+                    Tem certeza que deseja excluir esta nota? Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex gap-3 justify-end">
+                    <button
+                      onClick={() => setNoteToDelete(null)}
+                      className="px-4 py-2 rounded font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDeleteNote}
+                      className="px-4 py-2 rounded font-medium bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
             )}
           </AnimatePresence>
 
