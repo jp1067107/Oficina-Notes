@@ -1,6 +1,6 @@
 {
   "name": "Oficina Notes",
-  "short_name": "Oficinotes",
+  "short_name": "Oficina",
   "description": "Gestor de Ordem de Serviço Automotiva",
   "start_url": "/",
   "display": "standalone",
