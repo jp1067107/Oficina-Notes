@@ -428,10 +428,12 @@ export default function App() {
       
       try {
         await setDoc(doc(db, 'notes', note.id), updatedNote);
+        return newStatus;
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `notes/${note.id}`);
       }
     }
+    return null;
   };
 
   const startRecording = async (pieceId: string) => {
@@ -943,10 +945,25 @@ export default function App() {
               </div>
             ) : (
               filteredNotes.map(note => (
-                <div 
+                <motion.div 
                   key={note.id}
                   onClick={() => handleEditNote(note)}
-                  className={`card group cursor-pointer active:scale-[0.98] transition-all relative overflow-hidden
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.5}
+                  onDragEnd={async (event, info) => {
+                    const swipeThreshold = 50;
+                    if (info.offset.x > swipeThreshold) {
+                      // swipe right -> advance status
+                      const newStatus = await handleAdjustStatus(note, 1);
+                      if (newStatus) setActiveTab(newStatus);
+                    } else if (info.offset.x < -swipeThreshold) {
+                      // swipe left -> rollback status
+                      const newStatus = await handleAdjustStatus(note, -1);
+                      if (newStatus) setActiveTab(newStatus);
+                    }
+                  }}
+                  className={`card group cursor-grab active:cursor-grabbing transition-colors relative overflow-hidden touch-pan-y
                     ${note.isDraft ? 'border-amber-500/50 bg-amber-500/5 shadow-[0_0_20px_rgba(245,158,11,0.1)]' : 'border-zinc-800 hover:border-brand'}`}
                 >
                   {note.isDraft && (
@@ -971,16 +988,6 @@ export default function App() {
                           <p className={`${note.isDraft ? 'text-amber-500' : 'text-brand'} text-xs font-mono font-bold whitespace-nowrap`}>R$ {note.totalValue?.toFixed(2)}</p>
                           <div className="h-4 w-[1px] bg-zinc-800"></div>
                           <div className="flex items-center gap-1">
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAdjustStatus(note, -1);
-                              }}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
-                              disabled={note.status === 'em_espera'}
-                            >
-                              <ChevronLeft size={16} />
-                            </button>
                             <span 
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -993,16 +1000,6 @@ export default function App() {
                             >
                               {SERVICE_STATUS_LABELS[note.status]}
                             </span>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAdjustStatus(note, 1);
-                              }}
-                              className="p-1 hover:bg-zinc-800 rounded text-zinc-500 hover:text-brand transition-colors disabled:opacity-20"
-                              disabled={note.status === 'finalizado'}
-                            >
-                              <ChevronRight size={16} />
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -1020,7 +1017,7 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))
             )}
           </div>
