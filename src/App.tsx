@@ -34,6 +34,7 @@ import {
   Sun,
   Moon,
   MessageCircle,
+  Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { CAR_PIECES, SERVICE_STATUS_LABELS } from "./constants";
@@ -183,6 +184,7 @@ export default function App() {
   const [isExportsModalOpen, setIsExportsModalOpen] = useState(false);
   const [isConfirmExportOpen, setIsConfirmExportOpen] = useState(false);
   const [exportsList, setExportsList] = useState<ExportLog[]>([]);
+  const [pixPaymentEmail, setPixPaymentEmail] = useState<string | null>(null);
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem("theme") === "light";
   });
@@ -340,13 +342,19 @@ export default function App() {
           const subData = subDoc.data();
 
           if (!subDoc.exists() || subData?.status !== "ativo") {
-            const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? "Sim" : "Não"}\nStatus da Assinatura: ${subData?.status || "N/A"}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
-            alert(errorDetails);
-            await signOut(auth);
-            setSubscriptionError(
-              "Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.",
-            );
-            setUser(null);
+            if (subDoc.exists() && subData?.status === "inativo") {
+              await signOut(auth);
+              setPixPaymentEmail(emailBusca);
+              setUser(null);
+            } else {
+              const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? "Sim" : "Não"}\nStatus da Assinatura: ${subData?.status || "N/A"}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
+              alert(errorDetails);
+              await signOut(auth);
+              setSubscriptionError(
+                "Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.",
+              );
+              setUser(null);
+            }
           } else {
             setUser(u);
             setSubscriptionError(null);
@@ -1123,12 +1131,17 @@ export default function App() {
       const subData = subDoc.data();
 
       if (!subDoc.exists() || subData?.status !== "ativo") {
-        const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? "Sim" : "Não"}\nStatus da Assinatura: ${subData?.status || "N/A"}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
-        alert(errorDetails);
-        await signOut(auth);
-        setSubscriptionError(
-          "Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.",
-        );
+        if (subDoc.exists() && subData?.status === "inativo") {
+          await signOut(auth);
+          setPixPaymentEmail(emailBusca);
+        } else {
+          const errorDetails = `Acesso Negado!\n\nTentamos buscar o e-mail: ${emailBusca}\nEncontrado no Banco: ${subDoc.exists() ? "Sim" : "Não"}\nStatus da Assinatura: ${subData?.status || "N/A"}\n\nVerifique se o e-mail no Firestore está escrito exatamente como acima (em minúsculas).`;
+          alert(errorDetails);
+          await signOut(auth);
+          setSubscriptionError(
+            "Acesso Negado: Sua assinatura não está ativa ou não foi encontrada. Contate o suporte.",
+          );
+        }
       } else {
         setUser(u);
         setCurrentNote(initialNote(u.uid));
@@ -1156,6 +1169,55 @@ export default function App() {
   }
 
   if (!user) {
+    if (pixPaymentEmail) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
+          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
+            <h2 className="text-2xl font-bold text-white mb-2">Assinatura Inativa</h2>
+            <p className="text-zinc-400 text-sm mb-6">
+              A sua assinatura para <strong>{pixPaymentEmail}</strong> encontra-se inativa. Realize o pagamento via PIX para reativar seu acesso.
+            </p>
+            
+            <div className="bg-white p-4 rounded-xl mb-6">
+              <img 
+                src="https://i.postimg.cc/s21f77tX/Whats-App-Image-2026-05-04-at-13-59-42.jpg" 
+                alt="QR Code PIX" 
+                className="w-48 h-48 object-contain" 
+                referrerPolicy="no-referrer" 
+              />
+            </div>
+
+            <p className="text-xs text-brand mb-4 uppercase tracking-widest font-bold">
+              Ou pague usando a chave
+            </p>
+            
+            <div className="w-full bg-zinc-800 p-3 rounded-lg flex items-center justify-between mb-6">
+               <span className="text-zinc-300 font-mono text-sm truncate mr-3">jp1067103@gmail.com</span>
+               <button 
+                 onClick={() => {
+                   navigator.clipboard.writeText("sua-chave-pix-aqui@email.com");
+                   alert("Chave Copiada!");
+                 }}
+                 className="text-brand hover:text-brand/80 p-2"
+               >
+                 <Copy size={16} />
+               </button>
+            </div>
+
+            <button
+              onClick={() => {
+                setPixPaymentEmail(null);
+                setSubscriptionError(null);
+              }}
+              className="w-full py-3 rounded-lg font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              Voltar para o Login
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
         <div className="w-20 h-20 bg-brand rounded-2xl flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
