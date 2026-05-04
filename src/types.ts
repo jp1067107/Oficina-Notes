@@ -1,5 +1,4 @@
-
-export type ServiceStatus = 'em_espera' | 'na_oficina' | 'finalizado';
+export type ServiceStatus = "em_espera" | "na_oficina" | "finalizado";
 
 export interface MaterialItem {
   id: string;

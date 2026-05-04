@@ -1,29 +1,31 @@
-import React, { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   readonly platforms: Array<string>;
   readonly userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed';
+    outcome: "accepted" | "dismissed";
     platform: string;
   }>;
   prompt(): Promise<void>;
 }
 
 const InstallButton: React.FC = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] =
+    useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
     const checkStandalone = () => {
-      const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || 
-                               (window.navigator as any).standalone === true;
+      const isStandaloneMode =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true;
       setIsStandalone(isStandaloneMode);
     };
 
     checkStandalone();
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    mediaQuery.addEventListener('change', checkStandalone);
+    const mediaQuery = window.matchMedia("(display-mode: standalone)");
+    mediaQuery.addEventListener("change", checkStandalone);
 
     if ((window as any).deferredPrompt) {
       setDeferredPrompt((window as any).deferredPrompt);
@@ -34,18 +36,18 @@ const InstallButton: React.FC = () => {
       setDeferredPrompt(e as BeforeInstallPromptEvent);
     };
 
-    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener("beforeinstallprompt", handler);
 
     const installHandler = () => {
       setDeferredPrompt(null);
       setIsStandalone(true);
     };
-    window.addEventListener('appinstalled', installHandler);
+    window.addEventListener("appinstalled", installHandler);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
-      window.removeEventListener('appinstalled', installHandler);
-      mediaQuery.removeEventListener('change', checkStandalone);
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installHandler);
+      mediaQuery.removeEventListener("change", checkStandalone);
     };
   }, []);
 
@@ -53,11 +55,11 @@ const InstallButton: React.FC = () => {
     if (!deferredPrompt) {
       return;
     }
-    
+
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
+
+    if (outcome === "accepted") {
       setDeferredPrompt(null);
     }
   };

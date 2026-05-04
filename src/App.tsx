@@ -37,7 +37,11 @@ import {
   Copy,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { CAR_PIECES, SERVICE_STATUS_LABELS } from "./constants";
+import {
+  CAR_PIECES,
+  MECHANIC_PIECES,
+  SERVICE_STATUS_LABELS,
+} from "./constants";
 import {
   NoteData,
   ServicePiece,
@@ -120,31 +124,37 @@ function handleFirestoreError(
 }
 
 // Initialize Note
-const initialNote = (userId: string = ""): NoteData => ({
-  id: crypto.randomUUID(),
-  userId,
-  customerName: "",
-  vehicleNameColor: "",
-  plate: "",
-  cpfCnpj: "",
-  whatsapp: "",
-  status: "em_espera",
-  arrivalDate: new Date().toISOString().split("T")[0],
-  pieces: CAR_PIECES.map((p) => ({ ...p, selected: false, description: "" })),
-  includePartsValue: false,
-  partsValue: 0,
-  includeLaborValue: false,
-  laborValue: 0,
-  includeMaterialsValue: false,
-  materialsValue: 0,
-  onlyTotalValue: false,
-  totalValue: 0,
-  materialItems: [],
-  observations: "",
-  isDraft: true,
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-});
+const initialNote = (
+  userId: string = "",
+  workshopType: "funilaria" | "mecanica" = "funilaria",
+): NoteData => {
+  const piecesList = workshopType === "mecanica" ? MECHANIC_PIECES : CAR_PIECES;
+  return {
+    id: crypto.randomUUID(),
+    userId,
+    customerName: "",
+    vehicleNameColor: "",
+    plate: "",
+    cpfCnpj: "",
+    whatsapp: "",
+    status: "em_espera",
+    arrivalDate: new Date().toISOString().split("T")[0],
+    pieces: piecesList.map((p) => ({ ...p, selected: false, description: "" })),
+    includePartsValue: false,
+    partsValue: 0,
+    includeLaborValue: false,
+    laborValue: 0,
+    includeMaterialsValue: false,
+    materialsValue: 0,
+    onlyTotalValue: false,
+    totalValue: 0,
+    materialItems: [],
+    observations: "",
+    isDraft: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+};
 
 // Main Application Component
 // Note: Transcription via AI requires a valid GEMINI_API_KEY set in the environment.
@@ -153,6 +163,17 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const [workshopType, setWorkshopType] = useState<
+    "funilaria" | "mecanica" | null
+  >(() => {
+    return localStorage.getItem("workshopType") as
+      | "funilaria"
+      | "mecanica"
+      | null;
+  });
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return localStorage.getItem("theme") === "light";
+  });
   const [loading, setLoading] = useState(true);
   const [isVerifyingSubscription, setIsVerifyingSubscription] = useState(false);
   const [subscriptionError, setSubscriptionError] = useState<string | null>(
@@ -160,7 +181,9 @@ export default function App() {
   );
   const [view, setView] = useState<"list" | "editor" | "details">("list");
   const [notes, setNotes] = useState<NoteData[]>([]);
-  const [currentNote, setCurrentNote] = useState<NoteData>(initialNote());
+  const [currentNote, setCurrentNote] = useState<NoteData>(
+    initialNote("", workshopType || "funilaria"),
+  );
   const [step, setStep] = useState(1);
   const [isRecording, setIsRecording] = useState<string | null>(null);
   const [isListening, setIsListening] = useState<string | null>(null);
@@ -185,9 +208,6 @@ export default function App() {
   const [isConfirmExportOpen, setIsConfirmExportOpen] = useState(false);
   const [exportsList, setExportsList] = useState<ExportLog[]>([]);
   const [pixPaymentEmail, setPixPaymentEmail] = useState<string | null>(null);
-  const [isLightMode, setIsLightMode] = useState(() => {
-    return localStorage.getItem("theme") === "light";
-  });
 
   useEffect(() => {
     if (isLightMode) {
@@ -358,7 +378,7 @@ export default function App() {
           } else {
             setUser(u);
             setSubscriptionError(null);
-            setCurrentNote(initialNote(u.uid));
+            setCurrentNote(initialNote(u.uid, workshopType || "funilaria"));
           }
         } catch (error) {
           console.error("Error verifying subscription:", error);
@@ -469,7 +489,7 @@ export default function App() {
   }, [user]);
 
   const handleCreateNote = () => {
-    setCurrentNote(initialNote(user?.uid || ""));
+    setCurrentNote(initialNote(user?.uid || "", workshopType || "funilaria"));
     setStep(1);
     setView("editor");
   };
@@ -1144,7 +1164,7 @@ export default function App() {
         }
       } else {
         setUser(u);
-        setCurrentNote(initialNote(u.uid));
+        setCurrentNote(initialNote(u.uid, workshopType || "funilaria"));
       }
     } catch (error: any) {
       if (
@@ -1173,35 +1193,41 @@ export default function App() {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
           <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
-            <h2 className="text-2xl font-bold text-white mb-2">Assinatura Inativa</h2>
+            <h2 className="text-2xl font-bold text-white mb-2">
+              Assinatura Inativa
+            </h2>
             <p className="text-zinc-400 text-sm mb-6">
-              A sua assinatura para <strong>{pixPaymentEmail}</strong> encontra-se inativa. Realize o pagamento via PIX para reativar seu acesso.
+              A sua assinatura para <strong>{pixPaymentEmail}</strong>{" "}
+              encontra-se inativa. Realize o pagamento via PIX para reativar seu
+              acesso.
             </p>
-            
+
             <div className="bg-white p-4 rounded-xl mb-6">
-              <img 
-                src="https://i.postimg.cc/s21f77tX/Whats-App-Image-2026-05-04-at-13-59-42.jpg" 
-                alt="QR Code PIX" 
-                className="w-48 h-48 object-contain" 
-                referrerPolicy="no-referrer" 
+              <img
+                src="https://i.postimg.cc/s21f77tX/Whats-App-Image-2026-05-04-at-13-59-42.jpg"
+                alt="QR Code PIX"
+                className="w-48 h-48 object-contain"
+                referrerPolicy="no-referrer"
               />
             </div>
 
             <p className="text-xs text-brand mb-4 uppercase tracking-widest font-bold">
               Ou pague usando a chave
             </p>
-            
+
             <div className="w-full bg-zinc-800 p-3 rounded-lg flex items-center justify-between mb-6">
-               <span className="text-zinc-300 font-mono text-sm truncate mr-3">jp1067103@gmail.com</span>
-               <button 
-                 onClick={() => {
-                   navigator.clipboard.writeText("sua-chave-pix-aqui@email.com");
-                   alert("Chave Copiada!");
-                 }}
-                 className="text-brand hover:text-brand/80 p-2"
-               >
-                 <Copy size={16} />
-               </button>
+              <span className="text-zinc-300 font-mono text-sm truncate mr-3">
+                jp1067103@gmail.com
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText("sua-chave-pix-aqui@email.com");
+                  alert("Chave Copiada!");
+                }}
+                className="text-brand hover:text-brand/80 p-2"
+              >
+                <Copy size={16} />
+              </button>
             </div>
 
             <button
@@ -1266,6 +1292,43 @@ export default function App() {
         <p className="mt-8 text-zinc-700 text-[9px] uppercase tracking-[0.2em]">
           Powered by Antigravity
         </p>
+      </div>
+    );
+  }
+
+  if (!workshopType) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
+        <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Bem-vindo(a)!</h2>
+          <p className="text-zinc-400 text-sm mb-6">
+            Para personalizar sua experiência, escolha o tipo principal da sua
+            oficina:
+          </p>
+
+          <div className="grid gap-4 w-full">
+            <button
+              onClick={() => {
+                setWorkshopType("funilaria");
+                localStorage.setItem("workshopType", "funilaria");
+                setCurrentNote(initialNote(user?.uid || "", "funilaria"));
+              }}
+              className="w-full py-4 rounded-xl font-bold text-black bg-brand hover:bg-brand/90 transition-colors uppercase tracking-widest text-xs shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+            >
+              Funilaria e Pintura
+            </button>
+            <button
+              onClick={() => {
+                setWorkshopType("mecanica");
+                localStorage.setItem("workshopType", "mecanica");
+                setCurrentNote(initialNote(user?.uid || "", "mecanica"));
+              }}
+              className="w-full py-4 rounded-xl font-bold text-white bg-zinc-800 border border-zinc-700 hover:bg-zinc-700 transition-colors uppercase tracking-widest text-xs"
+            >
+              Oficina Mecânica
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1344,6 +1407,30 @@ export default function App() {
                           >
                             <Download size={16} />
                             <span>Planilhas Exportadas</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              const newType =
+                                workshopType === "funilaria"
+                                  ? "mecanica"
+                                  : "funilaria";
+                              setWorkshopType(newType);
+                              localStorage.setItem("workshopType", newType);
+                              // Clear active selections so it doesn't break when loading other module pieces
+                              setCurrentNote(
+                                initialNote(user?.uid || "", newType),
+                              );
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            <Edit2 size={16} />
+                            <span>
+                              Mudar para{" "}
+                              {workshopType === "funilaria"
+                                ? "Mecânica"
+                                : "Funilaria"}
+                            </span>
                           </button>
                           <button
                             onClick={() => {
