@@ -35,6 +35,8 @@ import {
   Moon,
   MessageCircle,
   Copy,
+  Home,
+  MapPin,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -171,6 +173,23 @@ export default function App() {
       | "mecanica"
       | null;
   });
+
+  const [workshopData, setWorkshopData] = useState<{
+    name: string;
+    cnpj: string;
+    location: string;
+  } | null>(() => {
+    const data = localStorage.getItem("workshopData");
+    return data ? JSON.parse(data) : null;
+  });
+
+  const [isWorkshopDataModalOpen, setIsWorkshopDataModalOpen] = useState(false);
+  const [draftWorkshopData, setDraftWorkshopData] = useState<{
+    name: string;
+    cnpj: string;
+    location: string;
+  }>({ name: "", cnpj: "", location: "" });
+
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem("theme") === "light";
   });
@@ -556,12 +575,12 @@ export default function App() {
     const doc = new jsPDF();
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16);
-    doc.text("Relatório de Ordens de Serviço (Finalizadas)", 14, 20);
+    doc.text(`${workshopData?.name || "OFICINA NOTES"} - Relatórios`, 14, 20);
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.text(
-      `Data de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
+      `CNPJ: ${workshopData?.cnpj || "N/A"}\nLocalização: ${workshopData?.location || "N/A"}\nData de geração: ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
       14,
       28,
     );
@@ -579,7 +598,7 @@ export default function App() {
     });
 
     autoTable(doc, {
-      startY: 35,
+      startY: 45,
       head: [["Cliente", "Veículo", "Placa", "Total"]],
       body: tableBody,
       theme: "striped",
@@ -939,16 +958,28 @@ export default function App() {
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
-    doc.text("OFICINA NOTES", margin, 25);
+    doc.text(workshopData?.name?.toUpperCase() || "OFICINA NOTES", margin, 25);
 
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     doc.text("ORDEM DE SERVIÇO / ORÇAMENTO", margin, 32);
 
+    if (workshopData?.location) {
+      doc.setFontSize(8);
+      doc.setTextColor(200, 200, 200);
+      doc.text(workshopData.location, margin, 37);
+      doc.setTextColor(255, 255, 255);
+    }
+
     doc.setTextColor(150, 150, 150);
     doc.text(`EMITIDO EM: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, 190, 25, {
       align: "right",
     });
+    if (workshopData?.cnpj) {
+      doc.text(`CNPJ: ${workshopData.cnpj}`, 190, 32, {
+        align: "right",
+      });
+    }
 
     y = 55;
     doc.setTextColor(0, 0, 0);
@@ -1333,6 +1364,78 @@ export default function App() {
     );
   }
 
+  if (!workshopData) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-6 bg-black">
+        <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-8 flex flex-col items-center text-center shadow-2xl">
+          <h2 className="text-2xl font-bold text-white mb-2">Quase lá!</h2>
+          <p className="text-zinc-400 text-sm mb-6">
+            Preencha os dados da sua oficina para que eles apareçam nas
+            Notas/Orçamentos exportados.
+          </p>
+
+          <form
+            className="w-full flex flex-col gap-4 text-left"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              const data = {
+                name: formData.get("name") as string,
+                cnpj: formData.get("cnpj") as string,
+                location: formData.get("location") as string,
+              };
+              setWorkshopData(data);
+              localStorage.setItem("workshopData", JSON.stringify(data));
+            }}
+          >
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                Nome da Oficina
+              </label>
+              <input
+                required
+                name="name"
+                type="text"
+                className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                placeholder="Ex: Oficina do João"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                CNPJ (Opcional)
+              </label>
+              <input
+                name="cnpj"
+                type="text"
+                className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                placeholder="Ex: 00.000.000/0000-00"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                Endereço/Localização
+              </label>
+              <input
+                required
+                name="location"
+                type="text"
+                className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                placeholder="Ex: Rua das Flores, 123"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-4 mt-2 rounded-xl font-bold text-black bg-brand hover:bg-brand/90 transition-colors uppercase tracking-widest text-xs shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+            >
+              Concluir Configuração
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen pb-20 max-w-lg mx-auto">
       {view === "list" ? (
@@ -1431,6 +1534,20 @@ export default function App() {
                                 ? "Mecânica"
                                 : "Funilaria"}
                             </span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setIsMenuOpen(false);
+                              if (workshopData) {
+                                setDraftWorkshopData(workshopData);
+                              }
+                              setIsWorkshopDataModalOpen(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-4 py-3 text-sm text-zinc-100 hover:text-brand hover:bg-zinc-800/50 transition-colors text-left"
+                          >
+                            <Home size={16} />
+                            <span>Editar Dados da Oficina</span>
                           </button>
                           <button
                             onClick={() => {
@@ -1908,6 +2025,31 @@ export default function App() {
                   <MessageCircle size={18} /> AVISAR PRONTO
                 </button>
               </div>
+              <button
+                onClick={() => {
+                  if ("geolocation" in navigator) {
+                    navigator.geolocation.getCurrentPosition(
+                      (position) => {
+                        const { latitude, longitude } = position.coords;
+                        const message = `*${workshopData?.name?.toUpperCase() || "OFICINA NOTES"}*\n\nAqui está a nossa localização:\nhttps://maps.google.com/?q=${latitude},${longitude}`;
+                        window.open(
+                          `https://wa.me/${currentNote.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
+                          "_blank",
+                        );
+                      },
+                      () =>
+                        alert(
+                          "Não foi possível acessar a localização do dispositivo.",
+                        ),
+                    );
+                  } else {
+                    alert("Geolocalização não é suportada por este navegador.");
+                  }
+                }}
+                className="w-full bg-zinc-800 text-brand font-black uppercase tracking-widest text-[10px] py-4 rounded flex items-center justify-center gap-2"
+              >
+                <MapPin size={18} /> ENVIAR LOCALIZAÇÃO
+              </button>
             </div>
           </div>
         </div>
@@ -2843,6 +2985,33 @@ export default function App() {
                       AVISAR PRONTO
                     </button>
                   </div>
+                  <button
+                    onClick={() => {
+                      if ("geolocation" in navigator) {
+                        navigator.geolocation.getCurrentPosition(
+                          (position) => {
+                            const { latitude, longitude } = position.coords;
+                            const message = `*${workshopData?.name?.toUpperCase() || "OFICINA NOTES"}*\n\nAqui está a nossa localização:\nhttps://maps.google.com/?q=${latitude},${longitude}`;
+                            window.open(
+                              `https://wa.me/${currentNote.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
+                              "_blank",
+                            );
+                          },
+                          () =>
+                            alert(
+                              "Não foi possível acessar a localização do dispositivo.",
+                            ),
+                        );
+                      } else {
+                        alert(
+                          "Geolocalização não é suportada por este navegador.",
+                        );
+                      }
+                    }}
+                    className="w-full bg-zinc-800 text-brand font-black uppercase tracking-widest text-[10px] py-4 rounded flex items-center justify-center gap-2"
+                  >
+                    <MapPin size={18} /> ENVIAR LOCALIZAÇÃO
+                  </button>
 
                   <button
                     onClick={exportJSON}
@@ -2883,6 +3052,114 @@ export default function App() {
           </footer>
         </div>
       )}
+
+      <AnimatePresence>
+        {isWorkshopDataModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Home size={20} className="text-brand" />
+                  Dados da Oficina
+                </h3>
+                <button
+                  onClick={() => setIsWorkshopDataModalOpen(false)}
+                  className="p-2 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-800 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-4 overflow-y-auto w-full">
+                <form
+                  className="w-full flex flex-col gap-4 text-left"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setWorkshopData(draftWorkshopData);
+                    localStorage.setItem(
+                      "workshopData",
+                      JSON.stringify(draftWorkshopData),
+                    );
+                    setIsWorkshopDataModalOpen(false);
+                    alert("Dados salvos com sucesso!");
+                  }}
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                      Nome da Oficina
+                    </label>
+                    <input
+                      required
+                      value={draftWorkshopData.name}
+                      onChange={(e) =>
+                        setDraftWorkshopData((prev) => ({
+                          ...prev,
+                          name: e.target.value,
+                        }))
+                      }
+                      type="text"
+                      className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                      placeholder="Ex: Oficina do João"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                      CNPJ (Opcional)
+                    </label>
+                    <input
+                      value={draftWorkshopData.cnpj}
+                      onChange={(e) =>
+                        setDraftWorkshopData((prev) => ({
+                          ...prev,
+                          cnpj: e.target.value,
+                        }))
+                      }
+                      type="text"
+                      className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                      placeholder="Ex: 00.000.000/0000-00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-400 mb-1 uppercase">
+                      Endereço/Localização
+                    </label>
+                    <input
+                      required
+                      value={draftWorkshopData.location}
+                      onChange={(e) =>
+                        setDraftWorkshopData((prev) => ({
+                          ...prev,
+                          location: e.target.value,
+                        }))
+                      }
+                      type="text"
+                      className="w-full bg-black border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-brand transition-colors"
+                      placeholder="Ex: Rua das Flores, 123"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-4 mt-2 rounded-xl font-bold text-black bg-brand hover:bg-brand/90 transition-colors uppercase tracking-widest text-xs shadow-[0_0_30px_rgba(34,197,94,0.2)]"
+                  >
+                    Salvar Alterações
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {isExportsModalOpen && (
