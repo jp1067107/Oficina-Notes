@@ -3,6 +3,7 @@ export type ServiceStatus = "em_espera" | "na_oficina" | "finalizado";
 export interface MaterialItem {
   id: string;
   name: string;
+  quantity?: number;
   price: number;
 }
 

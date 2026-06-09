@@ -43,6 +43,7 @@ import {
   CAR_PIECES,
   MECHANIC_PIECES,
   SERVICE_STATUS_LABELS,
+  FUNILARIA_MATERIALS_LIST,
 } from "./constants";
 import {
   NoteData,
@@ -131,6 +132,16 @@ const initialNote = (
   workshopType: "funilaria" | "mecanica" = "funilaria",
 ): NoteData => {
   const piecesList = workshopType === "mecanica" ? MECHANIC_PIECES : CAR_PIECES;
+  const initialMaterials: MaterialItem[] =
+    workshopType === "funilaria"
+      ? FUNILARIA_MATERIALS_LIST.map((m) => ({
+          id: m.id,
+          name: m.name,
+          price: 0,
+          quantity: 0,
+        }))
+      : [];
+
   return {
     id: crypto.randomUUID(),
     userId,
@@ -150,7 +161,7 @@ const initialNote = (
     materialsValue: 0,
     onlyTotalValue: false,
     totalValue: 0,
-    materialItems: [],
+    materialItems: initialMaterials,
     observations: "",
     isDraft: true,
     createdAt: new Date().toISOString(),
@@ -179,8 +190,12 @@ export default function App() {
     cnpj: string;
     location: string;
   } | null>(() => {
-    const data = localStorage.getItem("workshopData");
-    return data ? JSON.parse(data) : null;
+    try {
+      const data = localStorage.getItem("workshopData");
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
   });
 
   const [isWorkshopDataModalOpen, setIsWorkshopDataModalOpen] = useState(false);
@@ -288,7 +303,14 @@ export default function App() {
 
     if (note.includeMaterialsValue) {
       const itemsSum = (note.materialItems || []).reduce(
-        (acc, item) => acc + (Number(item.price) || 0),
+        (acc, item) => {
+          // If it's a predefined item with 0 price and 0 quantity, it adds 0.
+          // If user inputs price but no quantity, quantity defaults to 1.
+          const qty = item.quantity && item.quantity > 0 ? item.quantity : 1;
+          const price = Number(item.price) || 0;
+          // But if it's from predefined and they didn't touch it, price is 0 so it's fine.
+          return acc + (qty * price);
+        },
         0,
       );
       total += itemsSum > 0 ? itemsSum : Number(note.materialsValue) || 0;
@@ -1082,13 +1104,16 @@ export default function App() {
       y += 6;
 
       doc.setFont("helvetica", "normal");
-      (currentNote.materialItems || []).forEach((item) => {
+      const filteredItems = (currentNote.materialItems || []).filter(item => (item.price > 0 || (item.quantity && item.quantity > 0)));
+      filteredItems.forEach((item) => {
         if (y > 270) {
           doc.addPage();
           y = 20;
         }
-        doc.text(`${item.name}`, margin + 5, y);
-        doc.text(`R$ ${item.price.toFixed(2)}`, 190, y, { align: "right" });
+        const qtyStr = item.quantity && item.quantity > 0 ? `${item.quantity}x ` : "";
+        doc.text(`${qtyStr}${item.name}`, margin + 5, y);
+        const itemTotal = (item.quantity && item.quantity > 0 ? item.quantity : 1) * (item.price || 0);
+        doc.text(`R$ ${itemTotal.toFixed(2)}`, 190, y, { align: "right" });
         y += 6;
         doc.setDrawColor(230, 230, 230);
         doc.line(margin + 5, y - 1, 185, y - 1);
@@ -1955,24 +1980,32 @@ export default function App() {
                 )}
               </div>
 
-              {(currentNote.materialItems?.length || 0) > 0 && (
-                <div className="space-y-1 mb-4 border-b border-zinc-800 pb-4">
-                  <p className="text-[8px] text-zinc-600 mb-2 uppercase font-black">
-                    Detalhamento de Itens
-                  </p>
-                  {(currentNote.materialItems || []).map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex justify-between text-[10px] text-zinc-400"
-                    >
-                      <span>{item.name}</span>
-                      <span className="font-mono">
-                        R$ {item.price.toFixed(2)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                  {(() => {
+                    const filteredItems = (currentNote.materialItems || []).filter(item => (item.price > 0 || (item.quantity && item.quantity > 0)));
+                    if (filteredItems.length === 0) return null;
+                    return (
+                      <div className="space-y-1 mb-4 border-b border-zinc-800 pb-4">
+                        <p className="text-[8px] text-zinc-600 mb-2 uppercase font-black">
+                          Detalhamento de Itens
+                        </p>
+                        {filteredItems.map((item) => {
+                          const qtyStr = item.quantity && item.quantity > 0 ? `${item.quantity}x ` : "";
+                          const itemTotal = (item.quantity && item.quantity > 0 ? item.quantity : 1) * (item.price || 0);
+                          return (
+                            <div
+                              key={item.id}
+                              className="flex justify-between text-[10px] text-zinc-400"
+                            >
+                              <span>{qtyStr}{item.name}</span>
+                              <span className="font-mono">
+                                R$ {itemTotal.toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
 
               <div className="flex justify-between items-end">
                 <span className="text-[10px] font-black uppercase text-zinc-500">
@@ -2617,6 +2650,7 @@ export default function App() {
                             const newItem: MaterialItem = {
                               id: crypto.randomUUID(),
                               name: "",
+                              quantity: 1,
                               price: 0,
                             };
                             setCurrentNote({
@@ -2671,6 +2705,25 @@ export default function App() {
                                   className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 outline-none focus:border-brand font-medium"
                                 />
                               </div>
+                              <div className="w-16">
+                                {idx === 0 && (
+                                  <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">
+                                    Qtd
+                                  </label>
+                                )}
+                                <input
+                                  type="number"
+                                  inputMode="numeric"
+                                  value={item.quantity || ""}
+                                  placeholder="1"
+                                  onChange={(e) => {
+                                    const newList = [...currentNote.materialItems];
+                                    newList[idx].quantity = e.target.value === "" ? 0 : Number(e.target.value);
+                                    setCurrentNote({ ...currentNote, materialItems: newList });
+                                  }}
+                                  className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 text-center outline-none focus:border-brand font-mono font-bold"
+                                />
+                              </div>
                               <div className="w-24">
                                 {idx === 0 && (
                                   <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">
@@ -2683,6 +2736,7 @@ export default function App() {
                                   </span>
                                   <input
                                     type="number"
+                                    inputMode="decimal"
                                     value={item.price || ""}
                                     placeholder="0,00"
                                     onChange={(e) => {
@@ -2914,22 +2968,31 @@ export default function App() {
                         </div>
                       )}
 
-                      {(currentNote.materialItems?.length || 0) > 0 &&
-                        !currentNote.onlyTotalValue && (
-                          <div className="mt-2 pt-2 border-t border-zinc-800/50 space-y-1">
-                            {(currentNote.materialItems || []).map((item) => (
-                              <div
-                                key={item.id}
-                                className="flex justify-between text-[8px] text-zinc-500 uppercase"
-                              >
-                                <span>{item.name}</span>
-                                <span className="font-mono">
-                                  R$ {item.price.toFixed(2)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                      {(() => {
+                        const filteredItems = (currentNote.materialItems || []).filter(item => (item.price > 0 || (item.quantity && item.quantity > 0)));
+                        if (filteredItems.length > 0 && !currentNote.onlyTotalValue) {
+                          return (
+                            <div className="mt-2 pt-2 border-t border-zinc-800/50 space-y-1">
+                              {filteredItems.map((item) => {
+                                const qtyStr = item.quantity && item.quantity > 0 ? `${item.quantity}x ` : "";
+                                const itemTotal = (item.quantity && item.quantity > 0 ? item.quantity : 1) * (item.price || 0);
+                                return (
+                                  <div
+                                    key={item.id}
+                                    className="flex justify-between text-[8px] text-zinc-500 uppercase"
+                                  >
+                                    <span>{qtyStr}{item.name}</span>
+                                    <span className="font-mono">
+                                      R$ {itemTotal.toFixed(2)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
 
                       <div className="flex justify-between items-end mt-2">
                         <span className="text-3xl font-black italic tracking-tighter text-brand">

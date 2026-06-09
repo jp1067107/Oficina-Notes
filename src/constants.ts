@@ -4,6 +4,37 @@ export const SERVICE_STATUS_LABELS = {
   finalizado: "Finalizado",
 };
 
+export const FUNILARIA_MATERIALS_LIST = [
+  { id: "lixa_dagua_220", name: "LIXA D'ÁGUA GRÃO 220" },
+  { id: "lixa_dagua_400", name: "LIXA D'ÁGUA GRÃO 400" },
+  { id: "lixa_dagua_600", name: "LIXA D'ÁGUA GRÃO 600" },
+  { id: "lixa_dagua_1200", name: "LIXA D'ÁGUA GRÃO 1200" },
+  { id: "lixa_seca_80", name: "LIXA SECA GRÃO 80" },
+  { id: "lixa_seca_150", name: "LIXA SECA GRÃO 150" },
+  { id: "lixa_seca_220", name: "LIXA SECA GRÃO 220" },
+  { id: "lixa_roquite_80", name: "LIXA ROQUITE GRÃO 80" },
+  { id: "lixa_roquite_120", name: "LIXA ROQUITE GRÃO 120" },
+  { id: "lixa_roquite_220", name: "LIXA ROQUITE GRÃO 220" },
+  { id: "massa_poliester", name: "MASSA POLIÉSTER" },
+  { id: "desengraxante", name: "DESENGRAXANTE" },
+  { id: "diluente_universal", name: "DILUENTE UNIVERSAL" },
+  { id: "thinner_limpeza", name: "THINNER DE LIMPEZA" },
+  { id: "fita_crepe", name: "FITA CREPE" },
+  { id: "fita_dupla_face", name: "FITA DUPLA FACE" },
+  { id: "papel_isolante", name: "PAPEL ISOLANTE" },
+  { id: "promotor_aderencia", name: "PROMOTOR DE ADERÊNCIA" },
+  { id: "primer_pu", name: "PRIMER PU" },
+  { id: "primer_multifill", name: "PRIMER MULTIFILL" },
+  { id: "tinta_base", name: "TINTA BASE" },
+  { id: "tinta_preto_fosco", name: "TINTA PRETO FOSCO VINÍLICO" },
+  { id: "verniz_alto_solidos", name: "VERNIZ ALTO SÓLIDOS" },
+  { id: "polidor_premium", name: "POLIDOR PREMIUM" },
+  { id: "cera_lustradora", name: "CERA LUSTRADORA" },
+  { id: "boina_polimento", name: "BOINA DE POLIMENTO" },
+  { id: "boina_espuma", name: "BOINA ESPUMA" },
+  { id: "estopa", name: "ESTOPA" },
+];
+
 export const MECHANIC_PIECES = [
   { id: "motor", label: "Motor" },
   { id: "cambio", label: "Câmbio" },
