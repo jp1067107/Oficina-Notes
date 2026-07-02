@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { GoogleGenAI } from "@google/genai";
 import {
   Plus,
   FileText,
@@ -126,24 +125,23 @@ function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+const generateUUID = () => {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+};
+
 // Initialize Note
 const initialNote = (
   userId: string = "",
   workshopType: "funilaria" | "mecanica" = "funilaria",
 ): NoteData => {
   const piecesList = workshopType === "mecanica" ? MECHANIC_PIECES : CAR_PIECES;
-  const initialMaterials: MaterialItem[] =
-    workshopType === "funilaria"
-      ? FUNILARIA_MATERIALS_LIST.map((m) => ({
-          id: m.id,
-          name: m.name,
-          price: 0,
-          quantity: 0,
-        }))
-      : [];
+  const initialMaterials: MaterialItem[] = [];
 
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     userId,
     customerName: "",
     vehicleNameColor: "",
@@ -172,17 +170,20 @@ const initialNote = (
 // Main Application Component
 // Note: Transcription via AI requires a valid GEMINI_API_KEY set in the environment.
 // Deployment Note: If deployment fails with CustomOrgPolicyException, please check Org Policies for run.managed.requireInvokerIam.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [workshopType, setWorkshopType] = useState<
     "funilaria" | "mecanica" | null
   >(() => {
-    return localStorage.getItem("workshopType") as
-      | "funilaria"
-      | "mecanica"
-      | null;
+    try {
+      return localStorage.getItem("workshopType") as
+        | "funilaria"
+        | "mecanica"
+        | null;
+    } catch {
+      return null;
+    }
   });
 
   const [workshopData, setWorkshopData] = useState<{
@@ -206,7 +207,11 @@ export default function App() {
   }>({ name: "", cnpj: "", location: "" });
 
   const [isLightMode, setIsLightMode] = useState(() => {
-    return localStorage.getItem("theme") === "light";
+    try {
+      return localStorage.getItem("theme") === "light";
+    } catch {
+      return false;
+    }
   });
   const [loading, setLoading] = useState(true);
   const [isVerifyingSubscription, setIsVerifyingSubscription] = useState(false);
@@ -231,6 +236,8 @@ export default function App() {
   );
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
+  const [materialSearchTerm, setMaterialSearchTerm] = useState("");
   const [pieceSearchTerm, setPieceSearchTerm] = useState("");
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
   const [readyModalNote, setReadyModalNote] = useState<NoteData | null>(null);
@@ -244,12 +251,16 @@ export default function App() {
   const [pixPaymentEmail, setPixPaymentEmail] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isLightMode) {
-      document.body.classList.add("light");
-      localStorage.setItem("theme", "light");
-    } else {
-      document.body.classList.remove("light");
-      localStorage.setItem("theme", "dark");
+    try {
+      if (isLightMode) {
+        document.body.classList.add("light");
+        localStorage.setItem("theme", "light");
+      } else {
+        document.body.classList.remove("light");
+        localStorage.setItem("theme", "dark");
+      }
+    } catch {
+      // Ignora erro de localStorage
     }
   }, [isLightMode]);
 
@@ -257,39 +268,23 @@ export default function App() {
     base64Audio: string,
     mimeType: string = "audio/webm",
   ): Promise<string> => {
-    if (!process.env.GEMINI_API_KEY) {
-      console.error(
-        "Configuração ausente: GEMINI_API_KEY não encontrada no ambiente.",
-      );
-      return "";
-    }
-
     try {
-      // Remove base64 prefix if exists
-      const base64Data = base64Audio.includes(",")
-        ? base64Audio.split(",")[1]
-        : base64Audio;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            text: "Você é um especialista em transcrição de áudio para oficinas mecânicas. Transcreva o áudio de forma clara, técnica e profissional em português. Retorne apenas o texto transcrito. Se houver apenas ruído ou silêncio, retorne uma string vazia.",
-          },
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Data,
-            },
-          },
-        ],
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ base64Audio, mimeType }),
       });
 
-      const text = response.text?.trim() || "";
-      console.log("Transcrição concluída:", text);
-      return text;
+      if (!res.ok) {
+        const err = await res.json();
+        console.error("Transcription error from server:", err);
+        return "";
+      }
+      
+      const data = await res.json();
+      return data.text || "";
     } catch (error) {
-      console.error("Erro na transcrição via Gemini:", error);
+      console.error("Erro na transcrição:", error);
       return "";
     }
   };
@@ -372,7 +367,11 @@ export default function App() {
 
   // Environment Check
   useEffect(() => {
-    setIsIframe(window.self !== window.top);
+    try {
+      setIsIframe(window.self !== window.top);
+    } catch {
+      setIsIframe(true);
+    }
   }, []);
 
   // Test Connection
@@ -909,7 +908,7 @@ export default function App() {
         const json = JSON.parse(event.target?.result as string);
         setCurrentNote({
           ...json,
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           updatedAt: new Date().toISOString(),
         });
         setStep(1);
@@ -951,7 +950,7 @@ export default function App() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      const piece = currentNote.pieces.find((p) => p.id === pieceId);
+      const piece = currentNote.pieces || [].find((p) => p.id === pieceId);
       const currentDesc = piece?.description || "";
       updatePiece(pieceId, {
         description: currentDesc + (currentDesc ? " " : "") + transcript,
@@ -1044,7 +1043,7 @@ export default function App() {
     y += 15;
 
     // Services Section
-    const selectedPieces = currentNote.pieces.filter((p) => p.selected);
+    const selectedPieces = currentNote.pieces || [].filter((p) => p.selected);
     if (selectedPieces.length > 0) {
       if (y > 230) {
         doc.addPage();
@@ -1081,7 +1080,7 @@ export default function App() {
 
     // Material Items Section - Optimized List
     if (
-      (currentNote.materialItems?.length || 0) > 0 &&
+      ((currentNote.materialItems || [])?.length || 0) > 0 &&
       !currentNote.onlyTotalValue
     ) {
       if (y > 230) {
@@ -1905,12 +1904,12 @@ export default function App() {
             <div className="card">
               <h3 className="label-tech text-brand mb-4">Serviços e Peças</h3>
               <div className="space-y-4">
-                {currentNote.pieces.filter((p) => p.selected).length === 0 ? (
+                {currentNote.pieces || [].filter((p) => p.selected).length === 0 ? (
                   <p className="text-zinc-600 italic text-sm">
                     Nenhuma peça selecionada.
                   </p>
                 ) : (
-                  currentNote.pieces
+                  currentNote.pieces || []
                     .filter((p) => p.selected)
                     .map((piece) => (
                       <div
@@ -2305,7 +2304,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
-                  {currentNote.pieces
+                  {currentNote.pieces || []
                     .filter((piece) =>
                       piece.label
                         .toLowerCase()
@@ -2334,6 +2333,31 @@ export default function App() {
                         </span>
                       </div>
                     ))}
+                    
+                    {pieceSearchTerm &&
+                    currentNote.pieces || [].filter((piece) =>
+                      piece.label.toLowerCase().includes(pieceSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <button
+                        onClick={() => {
+                           const newId = pieceSearchTerm.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+                           setCurrentNote({
+                             ...currentNote,
+                             pieces: [
+                               { id: newId, label: pieceSearchTerm, selected: true, description: "" },
+                               ...currentNote.pieces || []
+                             ]
+                           });
+                           setPieceSearchTerm("");
+                        }}
+                        className="flex items-center justify-center gap-3 p-3 rounded border border-dashed border-zinc-700 hover:border-brand text-brand bg-black/40 cursor-pointer transition-colors"
+                      >
+                         <PlusCircle size={14} />
+                         <span className="text-[11px] font-black uppercase tracking-widest">
+                           ADICIONAR "{pieceSearchTerm}"
+                         </span>
+                      </button>
+                    )}
                 </div>
               </motion.div>
             )}
@@ -2349,12 +2373,12 @@ export default function App() {
                   <span className="w-1 h-3 bg-brand rounded-full"></span>NOTAS
                   DE SERVIÇO
                 </h2>
-                {currentNote.pieces.filter((p) => p.selected).length === 0 ? (
+                {currentNote.pieces || [].filter((p) => p.selected).length === 0 ? (
                   <div className="text-center py-10 text-zinc-600 italic">
                     Nenhuma peça selecionada na etapa anterior.
                   </div>
                 ) : (
-                  currentNote.pieces
+                  currentNote.pieces || []
                     .filter((p) => p.selected)
                     .map((piece) => (
                       <div key={piece.id} className="card space-y-3">
@@ -2645,30 +2669,38 @@ export default function App() {
                           <span className="w-1 h-3 bg-brand rounded-full"></span>
                           LISTA DE MATERIAIS / PEÇAS
                         </div>
-                        <button
-                          onClick={() => {
-                            const newItem: MaterialItem = {
-                              id: crypto.randomUUID(),
-                              name: "",
-                              quantity: 1,
-                              price: 0,
-                            };
-                            setCurrentNote({
-                              ...currentNote,
-                              materialItems: [
-                                ...currentNote.materialItems,
-                                newItem,
-                              ],
-                            });
-                          }}
-                          className="text-[10px] bg-brand text-black px-3 py-1.5 rounded font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
-                        >
-                          <PlusCircle size={14} /> ADICIONAR ITEM
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setIsMaterialModalOpen(true)}
+                            className="text-[10px] bg-zinc-800 text-white px-3 py-1.5 rounded font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
+                          >
+                            <Search size={14} /> BUSCAR MATERIAIS
+                          </button>
+                          <button
+                            onClick={() => {
+                              const newItem: MaterialItem = {
+                                id: generateUUID(),
+                                name: "",
+                                quantity: 1,
+                                price: 0,
+                              };
+                              setCurrentNote({
+                                ...currentNote,
+                                materialItems: [
+                                  ...(currentNote.materialItems || []),
+                                  newItem,
+                                ],
+                              });
+                            }}
+                            className="text-[10px] bg-brand text-black px-3 py-1.5 rounded font-black flex items-center gap-1.5 active:scale-95 transition-all shadow-lg"
+                          >
+                            <PlusCircle size={14} /> NOVO ITEM
+                          </button>
+                        </div>
                       </h2>
 
                       <div className="space-y-3">
-                        {(currentNote.materialItems?.length || 0) === 0 ? (
+                        {((currentNote.materialItems || [])?.length || 0) === 0 ? (
                           <div className="p-8 border border-zinc-900 border-dashed rounded-xl text-center">
                             <p className="text-[10px] text-zinc-600 italic uppercase">
                               Adicione itens para detalhar as peças ou materiais
@@ -2679,97 +2711,87 @@ export default function App() {
                           (currentNote.materialItems || []).map((item, idx) => (
                             <div
                               key={item.id}
-                              className="flex gap-2 items-end group bg-black/40 p-2 rounded-lg border border-zinc-900 shadow-sm"
+                              className="flex flex-col gap-2 group bg-black/40 p-3 rounded-lg border border-zinc-900 shadow-sm"
                             >
-                              <div className="flex-1">
-                                {idx === 0 && (
-                                  <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">
-                                    Item/Peça
-                                  </label>
-                                )}
-                                <input
-                                  type="text"
-                                  value={item.name}
-                                  placeholder="EX: LAMPADA H7"
-                                  onChange={(e) => {
-                                    const newList = [
-                                      ...currentNote.materialItems,
-                                    ];
-                                    newList[idx].name =
-                                      e.target.value.toUpperCase();
-                                    setCurrentNote({
-                                      ...currentNote,
-                                      materialItems: newList,
-                                    });
-                                  }}
-                                  className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 outline-none focus:border-brand font-medium"
-                                />
-                              </div>
-                              <div className="w-16">
-                                {idx === 0 && (
-                                  <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">
-                                    Qtd
-                                  </label>
-                                )}
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  value={item.quantity || ""}
-                                  placeholder="1"
-                                  onChange={(e) => {
-                                    const newList = [...currentNote.materialItems];
-                                    newList[idx].quantity = e.target.value === "" ? 0 : Number(e.target.value);
-                                    setCurrentNote({ ...currentNote, materialItems: newList });
-                                  }}
-                                  className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 text-center outline-none focus:border-brand font-mono font-bold"
-                                />
-                              </div>
-                              <div className="w-24">
-                                {idx === 0 && (
-                                  <label className="text-[8px] text-zinc-600 uppercase font-black mb-1 block">
-                                    Preço (R$)
-                                  </label>
-                                )}
-                                <div className="relative">
-                                  <span className="absolute left-0 bottom-2 text-zinc-600 text-[10px]">
-                                    R$
-                                  </span>
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex-1">
                                   <input
-                                    type="number"
-                                    inputMode="decimal"
-                                    value={item.price || ""}
-                                    placeholder="0,00"
+                                    type="text"
+                                    value={item.name}
+                                    placeholder="EX: LAMPADA H7"
                                     onChange={(e) => {
                                       const newList = [
-                                        ...currentNote.materialItems,
+                                        ...(currentNote.materialItems || []),
                                       ];
-                                      newList[idx].price =
-                                        e.target.value === ""
-                                          ? 0
-                                          : Number(e.target.value);
+                                      newList[idx].name =
+                                        e.target.value.toUpperCase();
                                       setCurrentNote({
                                         ...currentNote,
                                         materialItems: newList,
                                       });
                                     }}
-                                    className="w-full bg-transparent border-b border-zinc-800 text-xs py-2 pl-5 outline-none focus:border-brand font-mono font-bold"
+                                    className="w-full bg-transparent text-sm font-bold text-white outline-none placeholder:text-zinc-700"
                                   />
                                 </div>
+                                <button
+                                  onClick={() => {
+                                    const newList = (
+                                      (currentNote.materialItems || []) || []
+                                    ).filter((i) => i.id !== item.id);
+                                    setCurrentNote({
+                                      ...currentNote,
+                                      materialItems: newList,
+                                    });
+                                  }}
+                                  className="text-zinc-700 hover:text-red-500 transition-colors"
+                                >
+                                  <X size={16} />
+                                </button>
                               </div>
-                              <button
-                                onClick={() => {
-                                  const newList = (
-                                    currentNote.materialItems || []
-                                  ).filter((i) => i.id !== item.id);
-                                  setCurrentNote({
-                                    ...currentNote,
-                                    materialItems: newList,
-                                  });
-                                }}
-                                className="text-zinc-700 hover:text-red-500 p-2 opacity-50 group-hover:opacity-100 transition-all"
-                              >
-                                <X size={16} />
-                              </button>
+
+                              <div className="flex justify-between items-center mt-1 border-t border-zinc-900/50 pt-2">
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[10px] text-zinc-500 uppercase font-black">Qtd:</label>
+                                  <input
+                                    type="number"
+                                    inputMode="numeric"
+                                    value={item.quantity || ""}
+                                    placeholder="1"
+                                    onChange={(e) => {
+                                      const newList = [...(currentNote.materialItems || [])];
+                                      newList[idx].quantity = e.target.value === "" ? 0 : Number(e.target.value);
+                                      setCurrentNote({ ...currentNote, materialItems: newList });
+                                    }}
+                                    className="w-12 bg-transparent text-xs text-center outline-none text-brand font-mono border-b border-zinc-800 focus:border-brand"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[10px] text-zinc-500 uppercase font-black">Preço:</label>
+                                  <div className="relative">
+                                    <span className="absolute left-0 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px]">R$</span>
+                                    <input
+                                      type="number"
+                                      inputMode="decimal"
+                                      value={item.price || ""}
+                                      placeholder="0,00"
+                                      onChange={(e) => {
+                                        const newList = [
+                                          ...(currentNote.materialItems || []),
+                                        ];
+                                        newList[idx].price =
+                                          e.target.value === ""
+                                            ? 0
+                                            : Number(e.target.value);
+                                        setCurrentNote({
+                                          ...currentNote,
+                                          materialItems: newList,
+                                        });
+                                      }}
+                                      className="w-20 bg-transparent text-xs text-right pl-4 outline-none text-white font-mono border-b border-zinc-800 focus:border-brand"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           ))
                         )}
@@ -3304,6 +3326,136 @@ export default function App() {
 
         {isCalculatorOpen && (
           <CalculatorModal onClose={() => setIsCalculatorOpen(false)} />
+        )}
+
+        {isMaterialModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-6 flex flex-col h-[80vh]"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-bold text-white uppercase tracking-widest text-sm">
+                  Materiais
+                </h3>
+                <button
+                  onClick={() => setIsMaterialModalOpen(false)}
+                  className="text-zinc-500 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="relative mb-4">
+                <Search
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-700"
+                  size={16}
+                />
+                <input
+                  type="text"
+                  placeholder="Pesquisar material..."
+                  value={materialSearchTerm}
+                  onChange={(e) => setMaterialSearchTerm(e.target.value)}
+                  className="w-full bg-black/40 border border-zinc-800 rounded p-3 pl-10 text-sm text-white focus:outline-none focus:border-brand transition-colors placeholder:text-zinc-600"
+                />
+                {materialSearchTerm && (
+                  <button
+                    onClick={() => setMaterialSearchTerm("")}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 hover:text-white"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                {FUNILARIA_MATERIALS_LIST.filter((m) =>
+                  m.name.toLowerCase().includes(materialSearchTerm.toLowerCase()),
+                ).map((material) => {
+                  const isSelected = (currentNote.materialItems || [])?.some(
+                    (item) => item.id === material.id,
+                  );
+                  return (
+                    <div
+                      key={material.id}
+                      onClick={() => {
+                        if (isSelected) {
+                          setCurrentNote({
+                            ...currentNote,
+                            materialItems: (currentNote.materialItems || []).filter(
+                              (i) => i.id !== material.id,
+                            ),
+                          });
+                        } else {
+                          setCurrentNote({
+                            ...currentNote,
+                            materialItems: [
+                              ...(currentNote.materialItems || []),
+                              {
+                                id: material.id,
+                                name: material.name,
+                                quantity: 1,
+                                price: 0,
+                              },
+                            ],
+                          });
+                        }
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${
+                        isSelected
+                          ? "bg-brand/10 border-brand text-white"
+                          : "bg-black/40 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="text-xs font-bold">{material.name}</span>
+                      <div
+                        className={`w-4 h-4 rounded flex items-center justify-center ${
+                          isSelected ? "bg-brand text-black" : "bg-zinc-800"
+                        }`}
+                      >
+                        {isSelected && <Check size={12} strokeWidth={4} />}
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {materialSearchTerm &&
+                  FUNILARIA_MATERIALS_LIST.filter((m) =>
+                    m.name.toLowerCase().includes(materialSearchTerm.toLowerCase()),
+                  ).length === 0 && (
+                    <div
+                      onClick={() => {
+                        const newId = materialSearchTerm.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+                        setCurrentNote({
+                          ...currentNote,
+                          materialItems: [
+                            ...(currentNote.materialItems || []),
+                            {
+                              id: newId,
+                              name: materialSearchTerm.toUpperCase(),
+                              quantity: 1,
+                              price: 0,
+                            },
+                          ],
+                        });
+                        setMaterialSearchTerm("");
+                      }}
+                      className="flex items-center justify-center gap-2 p-3 rounded-lg border border-dashed border-zinc-700 hover:border-brand cursor-pointer text-brand bg-black/40 transition-all mt-2"
+                    >
+                      <PlusCircle size={14} />
+                      <span className="text-xs font-bold uppercase">Adicionar "{materialSearchTerm}"</span>
+                    </div>
+                  )}
+              </div>
+            </motion.div>
+          </motion.div>
         )}
 
         {isConfirmExportOpen && (
