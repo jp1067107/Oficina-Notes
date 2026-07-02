@@ -950,7 +950,7 @@ export default function App() {
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
-      const piece = currentNote.pieces || [].find((p) => p.id === pieceId);
+      const piece = (currentNote.pieces || []).find((p) => p.id === pieceId);
       const currentDesc = piece?.description || "";
       updatePiece(pieceId, {
         description: currentDesc + (currentDesc ? " " : "") + transcript,
@@ -1043,7 +1043,7 @@ export default function App() {
     y += 15;
 
     // Services Section
-    const selectedPieces = currentNote.pieces || [].filter((p) => p.selected);
+    const selectedPieces = (currentNote.pieces || []).filter((p) => p.selected);
     if (selectedPieces.length > 0) {
       if (y > 230) {
         doc.addPage();
@@ -1904,12 +1904,12 @@ export default function App() {
             <div className="card">
               <h3 className="label-tech text-brand mb-4">Serviços e Peças</h3>
               <div className="space-y-4">
-                {currentNote.pieces || [].filter((p) => p.selected).length === 0 ? (
+                {(currentNote.pieces || []).filter((p) => p.selected).length === 0 ? (
                   <p className="text-zinc-600 italic text-sm">
                     Nenhuma peça selecionada.
                   </p>
                 ) : (
-                  currentNote.pieces || []
+                  (currentNote.pieces || [])
                     .filter((p) => p.selected)
                     .map((piece) => (
                       <div
@@ -2304,7 +2304,7 @@ export default function App() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-2">
-                  {currentNote.pieces || []
+                  {(currentNote.pieces || [])
                     .filter((piece) =>
                       piece.label
                         .toLowerCase()
@@ -2335,7 +2335,7 @@ export default function App() {
                     ))}
                     
                     {pieceSearchTerm &&
-                    currentNote.pieces || [].filter((piece) =>
+                    (currentNote.pieces || []).filter((piece) =>
                       piece.label.toLowerCase().includes(pieceSearchTerm.toLowerCase())
                     ).length === 0 && (
                       <button
@@ -2345,7 +2345,7 @@ export default function App() {
                              ...currentNote,
                              pieces: [
                                { id: newId, label: pieceSearchTerm, selected: true, description: "" },
-                               ...currentNote.pieces || []
+                               ...(currentNote.pieces || [])
                              ]
                            });
                            setPieceSearchTerm("");
@@ -2373,12 +2373,12 @@ export default function App() {
                   <span className="w-1 h-3 bg-brand rounded-full"></span>NOTAS
                   DE SERVIÇO
                 </h2>
-                {currentNote.pieces || [].filter((p) => p.selected).length === 0 ? (
+                {(currentNote.pieces || []).filter((p) => p.selected).length === 0 ? (
                   <div className="text-center py-10 text-zinc-600 italic">
                     Nenhuma peça selecionada na etapa anterior.
                   </div>
                 ) : (
-                  currentNote.pieces || []
+                  (currentNote.pieces || [])
                     .filter((p) => p.selected)
                     .map((piece) => (
                       <div key={piece.id} className="card space-y-3">
